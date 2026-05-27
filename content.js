@@ -126,21 +126,44 @@ function ensureStyle() {
   style.id = STYLE_ID;
   style.textContent = `
     #${MODERATION_BUTTON_ID} {
-      display: block;
+      display: flex;
+      align-items: center;
       box-sizing: border-box;
       width: 100%;
-      min-height: 40px;
-      margin: 8px 0 0;
-      border: 1px solid #2f3336;
+      min-height: 42px;
+      margin: 8px 0 12px;
+      border: 1px solid transparent;
       border-radius: 999px;
-      color: #e7e9ea;
-      background: #000;
-      font: 700 14px/1 Arial, Helvetica, sans-serif;
+      padding: 0 16px;
+      color: #71767b;
+      background: #202327;
+      font: 400 15px/20px Arial, Helvetica, sans-serif;
+      text-align: left;
       cursor: pointer;
     }
 
     #${MODERATION_BUTTON_ID}:hover {
-      background: #16181c;
+      background: #1d2024;
+      border-color: #333639;
+    }
+
+    .cat-visit-x-hidden-spam-cell {
+      display: block !important;
+      box-sizing: border-box !important;
+      height: 0 !important;
+      min-height: 0 !important;
+      max-height: 0 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      border: 0 !important;
+      overflow: hidden !important;
+      pointer-events: none !important;
+      visibility: hidden !important;
+    }
+
+    .cat-visit-x-hidden-spam-cell,
+    .cat-visit-x-hidden-spam-cell * {
+      display: none !important;
     }
 
     #${MODERATION_MODAL_ID} {
@@ -443,12 +466,91 @@ function getVisibleCommentEntries() {
   });
 }
 
+function canCollapseSpamNode(node, article) {
+  if (!node || node === document.body || node === document.documentElement) {
+    return false;
+  }
+
+  if (node.matches("main, aside, section, [data-testid='primaryColumn'], [data-testid='sidebarColumn']")) {
+    return false;
+  }
+
+  const ariaLabel = node.getAttribute("aria-label") || "";
+  if (/timeline|conversation|primary|trending/i.test(ariaLabel)) {
+    return false;
+  }
+
+  const articles = node.querySelectorAll?.('article[data-testid="tweet"]') || [];
+  if (articles.length > 1 || (articles.length === 1 && articles[0] !== article)) {
+    return false;
+  }
+
+  const articleHeight = Math.max(article.getBoundingClientRect().height, 1);
+  const nodeHeight = node.getBoundingClientRect().height;
+  return nodeHeight > 0 && nodeHeight <= Math.max(articleHeight + 220, 900);
+}
+
+function getSpamCollapseNodes(article) {
+  const nodes = [];
+  const timelineCell = article.closest('[data-testid="cellInnerDiv"]');
+
+  for (let node = article; node && node !== document.body; node = node.parentElement) {
+    if (!canCollapseSpamNode(node, article)) {
+      if (node === timelineCell || nodes.length > 0) {
+        break;
+      }
+      continue;
+    }
+
+    nodes.push(node);
+
+    if (node.parentElement?.matches("[aria-label*='Timeline'], [data-testid='primaryColumn']")) {
+      break;
+    }
+  }
+
+  return nodes.length ? nodes : [timelineCell || article];
+}
+
+function getConversationTimeline() {
+  return document.querySelector('[aria-label="Timeline: Conversation"], [aria-label*="Timeline: Conversation"]');
+}
+
+function trimConversationBottomGap() {
+  const timeline = getConversationTimeline();
+  if (!timeline || foldedCommentStore.size === 0) {
+    timeline?.style.removeProperty("max-height");
+    timeline?.style.removeProperty("overflow");
+    return;
+  }
+
+  const visibleArticles = Array.from(timeline.querySelectorAll('article[data-testid="tweet"]'))
+    .filter((article) => !article.closest(".cat-visit-x-hidden-spam-cell"));
+
+  if (visibleArticles.length < 2) {
+    return;
+  }
+
+  const lastVisibleArticle = visibleArticles[visibleArticles.length - 1];
+  const timelineTop = timeline.getBoundingClientRect().top + window.scrollY;
+  const lastArticleBottom = lastVisibleArticle.getBoundingClientRect().bottom + window.scrollY;
+  const trimmedHeight = Math.ceil(lastArticleBottom - timelineTop);
+
+  if (trimmedHeight > 0) {
+    timeline.style.setProperty("max-height", `${trimmedHeight}px`, "important");
+    timeline.style.setProperty("overflow", "hidden", "important");
+  }
+}
+
 function removeSpamCommentArticle(article, comment) {
   if (!comment.isSpam) {
     return;
   }
 
   foldedCommentStore.set(comment.id, comment);
+  for (const node of getSpamCollapseNodes(article)) {
+    node.classList.add("cat-visit-x-hidden-spam-cell");
+  }
   article.remove();
 }
 
@@ -459,6 +561,7 @@ function processVisibleSpam() {
       removeSpamCommentArticle(article, comment);
     }
   }
+  trimConversationBottomGap();
 }
 
 function upsertPanel() {
@@ -588,7 +691,17 @@ function upsertPanel() {
 function findSearchInsertionTarget() {
   const searchInput = document.querySelector('[data-testid="SearchBox_Search_Input"], input[aria-label="Search query"]');
   if (searchInput) {
-    const searchBox = searchInput.closest('[data-testid="SearchBox_Search_Input"], form') || searchInput;
+    const explicitSearchSection = searchInput.closest('[aria-label="Search"]') || searchInput.closest('[role="search"]');
+    let searchSection = explicitSearchSection;
+
+    for (let node = searchInput; !searchSection && node && node !== document.body; node = node.parentElement) {
+      const nextText = normalizeText(node.nextElementSibling?.innerText || node.nextElementSibling?.textContent || "");
+      if (/^(Relevant people|What.s happening|Subscribe to Premium)/i.test(nextText)) {
+        searchSection = node;
+      }
+    }
+
+    const searchBox = searchSection || searchInput.closest('form, [data-testid="SearchBox_Search_Input"]') || searchInput;
     return {
       parent: searchBox.parentElement,
       reference: searchBox
