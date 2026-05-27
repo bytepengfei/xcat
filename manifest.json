@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Cat Visit X",
+  "description": "Open x.com from a popup and show a small cat visitor on X.",
+  "version": "1.0.0",
+  "action": {
+    "default_title": "Cat Visit X",
+    "default_popup": "popup.html"
+  },
+  "permissions": [
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://x.com/*",
+    "https://www.x.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://x.com/*",
+        "https://www.x.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
