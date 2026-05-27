@@ -125,45 +125,12 @@ function ensureStyle() {
   const style = document.createElement("style");
   style.id = STYLE_ID;
   style.textContent = `
-    .cat-visit-x-folded {
-      min-height: 0 !important;
-    }
-
-    .cat-visit-x-folded > :not(.cat-visit-x-folded-placeholder) {
-      display: none !important;
-    }
-
-    .cat-visit-x-folded-placeholder {
-      position: relative;
-      display: grid;
-      place-items: center;
-      width: calc(100% - 24px);
-      height: 36px;
-      margin: 6px 12px;
-      border: 1px solid #2f3336;
-      border-radius: 999px;
-      color: #e7e9ea;
-      background: #000;
-      cursor: pointer;
-    }
-
-    .cat-visit-x-folded-placeholder::before {
-      content: "";
-      width: 9px;
-      height: 9px;
-      border-right: 2px solid currentColor;
-      border-bottom: 2px solid currentColor;
-      transform: translateY(-2px) rotate(45deg);
-    }
-
-    .cat-visit-x-folded-placeholder:hover {
-      background: #16181c;
-    }
-
     #${MODERATION_BUTTON_ID} {
+      display: block;
+      box-sizing: border-box;
       width: 100%;
       min-height: 40px;
-      margin: 10px 0;
+      margin: 8px 0 0;
       border: 1px solid #2f3336;
       border-radius: 999px;
       color: #e7e9ea;
@@ -476,39 +443,20 @@ function getVisibleCommentEntries() {
   });
 }
 
-function foldCommentArticle(article, comment) {
-  ensureStyle();
-
+function removeSpamCommentArticle(article, comment) {
   if (!comment.isSpam) {
     return;
   }
 
   foldedCommentStore.set(comment.id, comment);
-
-  if (article.classList.contains("cat-visit-x-folded")) {
-    return;
-  }
-
-  article.classList.add("cat-visit-x-folded");
-
-  const placeholder = document.createElement("button");
-  placeholder.className = "cat-visit-x-folded-placeholder";
-  placeholder.type = "button";
-  placeholder.setAttribute("aria-label", `Show folded spam comment from ${comment.nickname || comment.username || "unknown user"}`);
-  placeholder.title = "Show folded comment";
-  placeholder.addEventListener("click", () => {
-    article.classList.remove("cat-visit-x-folded");
-    placeholder.remove();
-  });
-
-  article.prepend(placeholder);
+  article.remove();
 }
 
 function processVisibleSpam() {
   for (const { article, comment } of getVisibleCommentEntries()) {
     commentStore.set(comment.id, comment);
     if (comment.isSpam) {
-      foldCommentArticle(article, comment);
+      removeSpamCommentArticle(article, comment);
     }
   }
 }
@@ -640,10 +588,24 @@ function upsertPanel() {
 function findSearchInsertionTarget() {
   const searchInput = document.querySelector('[data-testid="SearchBox_Search_Input"], input[aria-label="Search query"]');
   if (searchInput) {
-    return searchInput.closest('form, [data-testid="SearchBox_Search_Input"]')?.parentElement || searchInput.parentElement;
+    const searchBox = searchInput.closest('[data-testid="SearchBox_Search_Input"], form') || searchInput;
+    return {
+      parent: searchBox.parentElement,
+      reference: searchBox
+    };
   }
 
-  return document.querySelector('aside [data-testid="sidebarColumn"], aside');
+  const sidebar = document.querySelector('aside [data-testid="sidebarColumn"], aside');
+  return sidebar
+    ? {
+        parent: sidebar,
+        reference: sidebar.firstElementChild
+      }
+    : null;
+}
+
+function getModerationButtonText() {
+  return `Hidden spam (${foldedCommentStore.size})`;
 }
 
 function upsertModerationButton() {
@@ -657,24 +619,35 @@ function upsertModerationButton() {
   const existingButton = document.getElementById(MODERATION_BUTTON_ID);
   const target = findSearchInsertionTarget();
 
-  if (!target) {
+  if (!target || !target.parent) {
     return;
   }
 
   if (existingButton) {
-    existingButton.textContent = `Folded spam (${foldedCommentStore.size})`;
+    existingButton.textContent = getModerationButtonText();
+    if (target.parent && existingButton.parentElement !== target.parent) {
+      target.reference?.insertAdjacentElement("afterend", existingButton);
+    }
     return;
   }
 
   const button = document.createElement("button");
   button.id = MODERATION_BUTTON_ID;
   button.type = "button";
-  button.textContent = `Folded spam (${foldedCommentStore.size})`;
+  button.textContent = getModerationButtonText();
+  button.addEventListener("mousedown", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
   button.addEventListener("click", () => {
     openModerationModal();
   });
 
-  target.insertAdjacentElement("afterend", button);
+  if (target.reference) {
+    target.reference.insertAdjacentElement("afterend", button);
+  } else {
+    target.parent.append(button);
+  }
 }
 
 function openModerationModal() {
@@ -692,7 +665,7 @@ function openModerationModal() {
   modal.innerHTML = `
     <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="cat-visit-x-moderation-title">
       <header>
-        <h2 id="cat-visit-x-moderation-title">Folded spam comments</h2>
+        <h2 id="cat-visit-x-moderation-title">Hidden spam comments</h2>
         <button type="button" data-action="close">Close</button>
       </header>
       <p data-role="modal-summary"></p>
@@ -707,8 +680,8 @@ function openModerationModal() {
   const summary = modal.querySelector('[data-role="modal-summary"]');
   const list = modal.querySelector('[data-role="modal-list"]');
   summary.textContent = comments.length
-    ? `${comments.length} folded comments found on this page.`
-    : "No folded spam comments on this page yet.";
+    ? `${comments.length} hidden comments found on this page.`
+    : "No hidden spam comments on this page yet.";
 
   list.replaceChildren(
     ...comments.map((comment) => {
@@ -856,7 +829,7 @@ function renderComments() {
   const summary = panel.querySelector('[data-role="summary"]');
   const list = panel.querySelector('[data-role="list"]');
 
-  summary.textContent = `${comments.length} loaded comments. ${foldedCommentStore.size} folded as spam.`;
+  summary.textContent = `${comments.length} loaded comments. ${foldedCommentStore.size} hidden as spam.`;
   list.replaceChildren(
     ...comments.map((comment) => {
       const item = document.createElement("li");
@@ -874,7 +847,7 @@ function renderComments() {
       premium.className = "premium";
       premium.textContent = getPremiumSummary(comment.userInfo);
       spam.className = "premium";
-      spam.textContent = comment.isSpam ? "Folded spam" : "";
+      spam.textContent = comment.isSpam ? "Hidden spam" : "";
       content.className = "content";
       content.textContent = comment.content;
 
