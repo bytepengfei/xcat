@@ -1,6 +1,8 @@
 const CUSTOM_KEYWORDS_STORAGE_KEY = "customSpamKeywords";
+const SHOW_COMMENT_PANEL_STORAGE_KEY = "showCommentPanel";
 const form = document.getElementById("settings-form");
 const keywordsInput = document.getElementById("keywords");
+const showCommentPanelInput = document.getElementById("show-comment-panel");
 const clearButton = document.getElementById("clear-keywords");
 const statusText = document.getElementById("status");
 
@@ -18,15 +20,21 @@ function parseKeywords(value) {
 }
 
 async function loadSettings() {
-  const stored = await chrome.storage.sync.get(CUSTOM_KEYWORDS_STORAGE_KEY);
+  const stored = await chrome.storage.sync.get([
+    CUSTOM_KEYWORDS_STORAGE_KEY,
+    SHOW_COMMENT_PANEL_STORAGE_KEY,
+  ]);
   const keywords = stored[CUSTOM_KEYWORDS_STORAGE_KEY];
   keywordsInput.value = Array.isArray(keywords) ? keywords.join("\n") : "";
+  showCommentPanelInput.checked =
+    stored[SHOW_COMMENT_PANEL_STORAGE_KEY] !== false;
 }
 
 async function saveSettings() {
   const keywords = parseKeywords(keywordsInput.value);
   await chrome.storage.sync.set({
     [CUSTOM_KEYWORDS_STORAGE_KEY]: keywords,
+    [SHOW_COMMENT_PANEL_STORAGE_KEY]: showCommentPanelInput.checked,
   });
   keywordsInput.value = keywords.join("\n");
   statusText.textContent = `已保存 ${keywords.length} 个自定义关键词。`;

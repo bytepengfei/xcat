@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Cat Visit X",
-  "description": "Open x.com from a popup and show a small cat visitor on X.",
+  "description": "Open x.com and filter unwanted replies on post pages.",
   "version": "1.0.0",
   "action": {
     "default_title": "Cat Visit X",

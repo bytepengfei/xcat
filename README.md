@@ -1,6 +1,6 @@
 # Cat Visit X
 
-This is an unpacked Chrome extension that opens `https://x.com/` from its popup and displays a small cat badge when the current page is on X.
+This is an unpacked Chrome extension that opens `https://x.com/` from its popup and filters unwanted replies on X post pages.
 
 On a specific post page, for example `https://x.com/dotey/status/2059143273889853709`, it also reads loaded comments and shows a floating panel with:
 
@@ -20,7 +20,11 @@ Premium fields are inferred from labels that X exposes in the page DOM, such as 
 
 Spam comments are removed from the visible DOM when the comment content, nickname, or username matches built-in spam signals such as giveaway, airdrop, Telegram/WhatsApp promotion, gambling, adult spam, or common Chinese spam keywords. A **Hidden spam** button is inserted next to the right-side X search box. It opens a list of hidden users and comments with checkboxes.
 
+The extension status badge appears on the right side of the **Hidden spam** bar instead of occupying a separate corner of the page.
+
 Open **屏蔽关键词设置** from the extension popup to add custom spam keywords. Enter one keyword per line. The settings are saved with Chrome sync storage and apply to open X pages without reinstalling the extension.
+
+The settings page also includes a switch for the floating X comments panel. Disabling the panel does not disable spam filtering or the **Hidden spam** button.
 
 The **Block selected** button is intentionally dry-run only. It logs the users that would be blocked, but it does not call the X block API.
 

@@ -15,6 +15,16 @@
       </header>
 
       <form id="settings-form">
+        <label class="toggle-row" for="show-comment-panel">
+          <span>
+            <strong>显示右侧评论浮窗</strong>
+            <small>关闭后仍会继续过滤垃圾评论。</small>
+          </span>
+          <input id="show-comment-panel" type="checkbox">
+        </label>
+
+        <hr>
+
         <label for="keywords">自定义关键词</label>
         <textarea id="keywords" rows="12" spellcheck="false" placeholder="每行输入一个关键词"></textarea>
         <p class="hint">每行一个关键词，不区分大小写。内置垃圾信息规则仍会继续生效。</p>

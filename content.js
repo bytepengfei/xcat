@@ -1,10 +1,11 @@
-const BADGE_ID = "cat-visit-x-badge";
 const COMMENT_PANEL_ID = "cat-visit-x-comments";
+const COMMENT_PANEL_STYLE_ID = "cat-visit-x-comments-style";
 const MODERATION_BUTTON_ID = "cat-visit-x-moderation-button";
 const MODERATION_MODAL_ID = "cat-visit-x-moderation-modal";
 const STYLE_ID = "cat-visit-x-style";
 const STATUS_PAGE_PATTERN = /^\/[^/]+\/status\/\d+/;
 const CUSTOM_KEYWORDS_STORAGE_KEY = "customSpamKeywords";
+const SHOW_COMMENT_PANEL_STORAGE_KEY = "showCommentPanel";
 const DEFAULT_SPAM_KEYWORDS = [
   "airdrop",
   "giveaway",
@@ -35,6 +36,7 @@ const DEFAULT_SPAM_KEYWORDS = [
   "同城上门",
 ];
 let customSpamKeywords = [];
+let showCommentPanel = true;
 let commentStore = new Map();
 let foldedCommentStore = new Map();
 let hiddenSpamNodeStore = new Map();
@@ -42,71 +44,6 @@ let storedStatusId = "";
 let autoScanTimer = 0;
 let autoScanLastCount = 0;
 let autoScanIdleRounds = 0;
-
-function createCatBadge() {
-  if (document.getElementById(BADGE_ID)) {
-    return;
-  }
-
-  const badge = document.createElement("button");
-  badge.id = BADGE_ID;
-  badge.type = "button";
-  badge.setAttribute("aria-label", "Cat Visit X is active");
-  badge.textContent = "Cat is visiting X";
-
-  const style = document.createElement("style");
-  style.textContent = `
-    #${BADGE_ID} {
-      position: fixed;
-      right: 18px;
-      bottom: 18px;
-      z-index: 2147483647;
-      min-width: 150px;
-      min-height: 42px;
-      border: 2px solid #202124;
-      border-radius: 8px;
-      padding: 8px 12px 8px 38px;
-      color: #202124;
-      background: #f7b267;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
-      font: 700 13px/1.2 Arial, Helvetica, sans-serif;
-      cursor: pointer;
-    }
-
-    #${BADGE_ID}::before {
-      content: "";
-      position: absolute;
-      left: 12px;
-      top: 50%;
-      width: 18px;
-      height: 16px;
-      border: 2px solid #202124;
-      border-radius: 7px;
-      background: #ffe0a8;
-      transform: translateY(-50%);
-    }
-
-    #${BADGE_ID}::after {
-      content: "";
-      position: absolute;
-      left: 17px;
-      top: 17px;
-      width: 4px;
-      height: 4px;
-      border-radius: 50%;
-      background: #202124;
-      box-shadow: 8px 0 0 #202124;
-    }
-  `;
-
-  badge.addEventListener("click", () => {
-    badge.remove();
-  });
-
-  document.documentElement.append(style, badge);
-}
-
-createCatBadge();
 
 function isStatusPage() {
   return STATUS_PAGE_PATTERN.test(window.location.pathname);
@@ -132,6 +69,8 @@ function ensureStyle() {
     #${MODERATION_BUTTON_ID} {
       display: flex;
       align-items: center;
+      justify-content: space-between;
+      gap: 12px;
       box-sizing: border-box;
       width: 100%;
       flex: 0 0 auto;
@@ -145,6 +84,17 @@ function ensureStyle() {
       font: 400 15px/20px Arial, Helvetica, sans-serif;
       text-align: left;
       cursor: pointer;
+    }
+
+    #${MODERATION_BUTTON_ID} .cat-status {
+      flex: 0 0 auto;
+      border-radius: 999px;
+      padding: 2px 8px;
+      color: #202124;
+      background: #f7b267;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 18px;
     }
 
     #${MODERATION_BUTTON_ID}:hover {
@@ -670,7 +620,10 @@ function upsertPanel() {
     <ol data-role="list"></ol>
   `;
 
-  const style = document.createElement("style");
+  const style =
+    document.getElementById(COMMENT_PANEL_STYLE_ID) ||
+    document.createElement("style");
+  style.id = COMMENT_PANEL_STYLE_ID;
   style.textContent = `
     #${COMMENT_PANEL_ID} {
       position: fixed;
@@ -772,7 +725,10 @@ function upsertPanel() {
     toggleAutoScan();
   });
 
-  document.documentElement.append(style, panel);
+  if (!style.isConnected) {
+    document.documentElement.append(style);
+  }
+  document.documentElement.append(panel);
   return panel;
 }
 
@@ -835,6 +791,15 @@ function getModerationButtonText() {
   return `Hidden spam (${foldedCommentStore.size})`;
 }
 
+function renderModerationButtonContent(button) {
+  const label = document.createElement("span");
+  const status = document.createElement("span");
+  label.textContent = getModerationButtonText();
+  status.className = "cat-status";
+  status.textContent = "Cat is visiting X";
+  button.replaceChildren(label, status);
+}
+
 function upsertModerationButton() {
   if (!isStatusPage()) {
     document.getElementById(MODERATION_BUTTON_ID)?.remove();
@@ -851,7 +816,7 @@ function upsertModerationButton() {
   }
 
   if (existingButton) {
-    existingButton.textContent = getModerationButtonText();
+    renderModerationButtonContent(existingButton);
     if (target.reference) {
       target.reference?.insertAdjacentElement(
         target.position || "afterend",
@@ -864,7 +829,7 @@ function upsertModerationButton() {
   const button = document.createElement("button");
   button.id = MODERATION_BUTTON_ID;
   button.type = "button";
-  button.textContent = getModerationButtonText();
+  renderModerationButtonContent(button);
   button.addEventListener("mousedown", (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -1065,7 +1030,6 @@ function renderComments() {
     document.getElementById(MODERATION_MODAL_ID)?.remove();
   }
 
-  const panel = upsertPanel();
   processVisibleSpam();
   for (const comment of collectVisibleComments()) {
     commentStore.set(comment.id, comment);
@@ -1076,6 +1040,12 @@ function renderComments() {
   upsertModerationButton();
 
   const comments = Array.from(commentStore.values());
+  if (!showCommentPanel) {
+    document.getElementById(COMMENT_PANEL_ID)?.remove();
+    return;
+  }
+
+  const panel = upsertPanel();
   const summary = panel.querySelector('[data-role="summary"]');
   const list = panel.querySelector('[data-role="list"]');
 
@@ -1156,19 +1126,29 @@ observer.observe(document.documentElement, {
 });
 
 async function loadCustomSpamKeywords() {
-  const stored = await chrome.storage.sync.get(CUSTOM_KEYWORDS_STORAGE_KEY);
+  const stored = await chrome.storage.sync.get([
+    CUSTOM_KEYWORDS_STORAGE_KEY,
+    SHOW_COMMENT_PANEL_STORAGE_KEY,
+  ]);
   customSpamKeywords = Array.isArray(stored[CUSTOM_KEYWORDS_STORAGE_KEY])
     ? stored[CUSTOM_KEYWORDS_STORAGE_KEY]
     : [];
+  showCommentPanel = stored[SHOW_COMMENT_PANEL_STORAGE_KEY] !== false;
 }
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName !== "sync" || !changes[CUSTOM_KEYWORDS_STORAGE_KEY]) {
+  if (areaName !== "sync") {
     return;
   }
 
-  const nextKeywords = changes[CUSTOM_KEYWORDS_STORAGE_KEY].newValue;
-  customSpamKeywords = Array.isArray(nextKeywords) ? nextKeywords : [];
+  if (changes[CUSTOM_KEYWORDS_STORAGE_KEY]) {
+    const nextKeywords = changes[CUSTOM_KEYWORDS_STORAGE_KEY].newValue;
+    customSpamKeywords = Array.isArray(nextKeywords) ? nextKeywords : [];
+  }
+  if (changes[SHOW_COMMENT_PANEL_STORAGE_KEY]) {
+    showCommentPanel =
+      changes[SHOW_COMMENT_PANEL_STORAGE_KEY].newValue !== false;
+  }
   scheduleRender();
 });
 
