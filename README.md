@@ -20,6 +20,8 @@ Premium fields are inferred from labels that X exposes in the page DOM, such as 
 
 Spam comments are removed from the visible DOM when the comment content, nickname, or username matches built-in spam signals such as giveaway, airdrop, Telegram/WhatsApp promotion, gambling, adult spam, or common Chinese spam keywords. A **Hidden spam** button is inserted next to the right-side X search box. It opens a list of hidden users and comments with checkboxes.
 
+Open **屏蔽关键词设置** from the extension popup to add custom spam keywords. Enter one keyword per line. The settings are saved with Chrome sync storage and apply to open X pages without reinstalling the extension.
+
 The **Block selected** button is intentionally dry-run only. It logs the users that would be blocked, but it does not call the X block API.
 
 ## Load it in Chrome

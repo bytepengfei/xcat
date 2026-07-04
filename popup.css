@@ -115,6 +115,16 @@ button:hover {
   background: #333;
 }
 
+.secondary {
+  border: 1px solid #202124;
+  color: #202124;
+  background: transparent;
+}
+
+.secondary:hover {
+  background: #e8e3d9;
+}
+
 .status {
   min-height: 18px;
   color: #16783d;

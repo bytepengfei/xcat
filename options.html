@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Cat Visit X 设置</title>
+    <link rel="stylesheet" href="options.css">
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">CAT VISIT X</p>
+        <h1>屏蔽关键词设置</h1>
+        <p class="description">评论、昵称或用户名中包含任一关键词时，该评论会被隐藏。</p>
+      </header>
+
+      <form id="settings-form">
+        <label for="keywords">自定义关键词</label>
+        <textarea id="keywords" rows="12" spellcheck="false" placeholder="每行输入一个关键词"></textarea>
+        <p class="hint">每行一个关键词，不区分大小写。内置垃圾信息规则仍会继续生效。</p>
+        <div class="actions">
+          <button type="submit">保存设置</button>
+          <button id="clear-keywords" class="secondary" type="button">清空自定义关键词</button>
+        </div>
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+      </form>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>

@@ -1,4 +1,5 @@
 const visitButton = document.getElementById("visit-x");
+const settingsButton = document.getElementById("open-settings");
 const statusText = document.getElementById("status");
 
 visitButton.addEventListener("click", async () => {
@@ -10,4 +11,8 @@ visitButton.addEventListener("click", async () => {
   } catch (error) {
     statusText.textContent = "Could not open x.com.";
   }
+});
+
+settingsButton.addEventListener("click", () => {
+  chrome.runtime.openOptionsPage();
 });

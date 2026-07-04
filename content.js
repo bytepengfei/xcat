@@ -4,7 +4,8 @@ const MODERATION_BUTTON_ID = "cat-visit-x-moderation-button";
 const MODERATION_MODAL_ID = "cat-visit-x-moderation-modal";
 const STYLE_ID = "cat-visit-x-style";
 const STATUS_PAGE_PATTERN = /^\/[^/]+\/status\/\d+/;
-const SPAM_KEYWORDS = [
+const CUSTOM_KEYWORDS_STORAGE_KEY = "customSpamKeywords";
+const DEFAULT_SPAM_KEYWORDS = [
   "airdrop",
   "giveaway",
   "free mint",
@@ -30,10 +31,13 @@ const SPAM_KEYWORDS = [
   "固炮",
   "点击主页",
   "粉丝",
-  "代充"
+  "代充",
+  "同城上门",
 ];
+let customSpamKeywords = [];
 let commentStore = new Map();
 let foldedCommentStore = new Map();
+let hiddenSpamNodeStore = new Map();
 let storedStatusId = "";
 let autoScanTimer = 0;
 let autoScanLastCount = 0;
@@ -130,6 +134,7 @@ function ensureStyle() {
       align-items: center;
       box-sizing: border-box;
       width: 100%;
+      flex: 0 0 auto;
       min-height: 42px;
       margin: 8px 0 12px;
       border: 1px solid transparent;
@@ -290,7 +295,9 @@ function ensureStyle() {
 }
 
 function getCommentId(article) {
-  const statusLink = Array.from(article.querySelectorAll('a[href*="/status/"]')).find((link) => {
+  const statusLink = Array.from(
+    article.querySelectorAll('a[href*="/status/"]'),
+  ).find((link) => {
     const href = link.getAttribute("href") || "";
     return /\/status\/\d+/.test(href);
   });
@@ -304,12 +311,16 @@ function getCommentId(article) {
 
 function getUserInfo(article) {
   const userNameBlock = article.querySelector('[data-testid="User-Name"]');
-  const profileLink = Array.from(article.querySelectorAll('a[href^="/"]')).find((link) => {
-    const href = link.getAttribute("href") || "";
-    return /^\/[A-Za-z0-9_]+$/.test(href);
-  });
+  const profileLink = Array.from(article.querySelectorAll('a[href^="/"]')).find(
+    (link) => {
+      const href = link.getAttribute("href") || "";
+      return /^\/[A-Za-z0-9_]+$/.test(href);
+    },
+  );
   const avatar = article.querySelector('img[src*="profile_images"]');
-  const usernameFromLink = profileLink ? `@${profileLink.getAttribute("href").slice(1)}` : "";
+  const usernameFromLink = profileLink
+    ? `@${profileLink.getAttribute("href").slice(1)}`
+    : "";
   const usernameText = userNameBlock
     ? Array.from(userNameBlock.querySelectorAll("span"))
         .map((span) => normalizeText(span.textContent || ""))
@@ -318,28 +329,42 @@ function getUserInfo(article) {
   const nickname = userNameBlock
     ? normalizeText(userNameBlock.querySelector("span")?.textContent || "")
     : "";
-  const visibleUserText = userNameBlock ? normalizeText(userNameBlock.innerText || userNameBlock.textContent || "") : "";
+  const visibleUserText = userNameBlock
+    ? normalizeText(userNameBlock.innerText || userNameBlock.textContent || "")
+    : "";
   const badgeLabels = userNameBlock
     ? Array.from(userNameBlock.querySelectorAll("[aria-label], [title]"))
-        .map((element) => normalizeText(`${element.getAttribute("aria-label") || ""} ${element.getAttribute("title") || ""}`))
+        .map((element) =>
+          normalizeText(
+            `${element.getAttribute("aria-label") || ""} ${element.getAttribute("title") || ""}`,
+          ),
+        )
         .filter(Boolean)
     : [];
-  const verifiedLabel = badgeLabels.find((label) => /verified|premium|subscribe/i.test(label)) || "";
-  const isPremiumPlus = badgeLabels.some((label) => /premium\s*\+/i.test(label));
+  const verifiedLabel =
+    badgeLabels.find((label) => /verified|premium|subscribe/i.test(label)) ||
+    "";
+  const isPremiumPlus = badgeLabels.some((label) =>
+    /premium\s*\+/i.test(label),
+  );
   const hasPremiumLabel = badgeLabels.some((label) => /premium/i.test(label));
   const isVerified = badgeLabels.some((label) => /verified/i.test(label));
 
   return {
     nickname,
     username: usernameText || usernameFromLink,
-    profileUrl: profileLink ? new URL(profileLink.getAttribute("href"), window.location.origin).href : "",
+    profileUrl: profileLink
+      ? new URL(profileLink.getAttribute("href"), window.location.origin).href
+      : "",
     avatarUrl: avatar ? avatar.src : "",
     userNameBlockText: visibleUserText,
     badgeLabels,
     verifiedLabel,
     isVerified,
-    isPremium: hasPremiumLabel || (isVerified && /verified account/i.test(verifiedLabel)),
-    isPremiumPlus
+    isPremium:
+      hasPremiumLabel ||
+      (isVerified && /verified account/i.test(verifiedLabel)),
+    isPremiumPlus,
   };
 }
 
@@ -349,9 +374,17 @@ function getCommentContent(article) {
     return "";
   }
 
-  const text = normalizeText(tweetText.innerText || tweetText.textContent || "");
-  const mediaLabels = Array.from(tweetText.querySelectorAll("img[alt], [aria-label]"))
-    .map((element) => normalizeText(element.getAttribute("alt") || element.getAttribute("aria-label") || ""))
+  const text = normalizeText(
+    tweetText.innerText || tweetText.textContent || "",
+  );
+  const mediaLabels = Array.from(
+    tweetText.querySelectorAll("img[alt], [aria-label]"),
+  )
+    .map((element) =>
+      normalizeText(
+        element.getAttribute("alt") || element.getAttribute("aria-label") || "",
+      ),
+    )
     .filter(Boolean);
 
   return normalizeText([text, ...mediaLabels].join(" "));
@@ -363,20 +396,23 @@ function detectSpam(comment) {
     comment.username,
     comment.userInfo?.userNameBlockText,
     comment.content,
-    comment.rawArticleText
+    comment.rawArticleText,
   ]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
   const reasons = [];
 
-  for (const keyword of SPAM_KEYWORDS) {
+  for (const keyword of [...DEFAULT_SPAM_KEYWORDS, ...customSpamKeywords]) {
     if (searchableText.includes(keyword.toLowerCase())) {
       reasons.push(`keyword:${keyword}`);
     }
   }
 
-  if (/(https?:\/\/|www\.)\S+/i.test(comment.content) && /(免费|领取|claim|airdrop|giveaway|bonus)/i.test(comment.content)) {
+  if (
+    /(https?:\/\/|www\.)\S+/i.test(comment.content) &&
+    /(免费|领取|claim|airdrop|giveaway|bonus)/i.test(comment.content)
+  ) {
     reasons.push("promo-link");
   }
 
@@ -386,7 +422,7 @@ function detectSpam(comment) {
 
   return {
     isSpam: reasons.length > 0,
-    reasons
+    reasons,
   };
 }
 
@@ -394,21 +430,23 @@ function buildCommentFromArticle(article) {
   const userInfo = getUserInfo(article);
   const content = getCommentContent(article);
   const id = getCommentId(article);
-  const rawArticleText = normalizeText(article.innerText || article.textContent || "");
+  const rawArticleText = normalizeText(
+    article.innerText || article.textContent || "",
+  );
   const comment = {
     id,
     nickname: userInfo.nickname,
     username: userInfo.username,
     userInfo,
     content,
-    rawArticleText
+    rawArticleText,
   };
   const spam = detectSpam(comment);
 
   return {
     ...comment,
     isSpam: spam.isSpam,
-    spamReasons: spam.reasons
+    spamReasons: spam.reasons,
   };
 }
 
@@ -418,7 +456,9 @@ function collectVisibleComments() {
   }
 
   const main = document.querySelector("main") || document;
-  const articles = Array.from(main.querySelectorAll('article[data-testid="tweet"]'));
+  const articles = Array.from(
+    main.querySelectorAll('article[data-testid="tweet"]'),
+  );
   const replyArticles = articles.slice(1);
   const originalStatusId = getStatusId();
 
@@ -433,7 +473,9 @@ function collectVisibleComments() {
         return false;
       }
 
-      return originalStatusId ? !comment.id.includes(`/status/${originalStatusId}`) : true;
+      return originalStatusId
+        ? !comment.id.includes(`/status/${originalStatusId}`)
+        : true;
     });
 }
 
@@ -443,27 +485,34 @@ function getVisibleCommentEntries() {
   }
 
   const main = document.querySelector("main") || document;
-  const articles = Array.from(main.querySelectorAll('article[data-testid="tweet"]'));
+  const articles = Array.from(
+    main.querySelectorAll('article[data-testid="tweet"]'),
+  );
   const originalStatusId = getStatusId();
 
-  return articles.slice(1).map((article) => {
-    const comment = buildCommentFromArticle(article);
+  return articles
+    .slice(1)
+    .map((article) => {
+      const comment = buildCommentFromArticle(article);
 
-    return {
-      article,
-      comment
-    };
-  }).filter(({ comment }) => {
-    if (!comment.nickname && !comment.username) {
-      return false;
-    }
+      return {
+        article,
+        comment,
+      };
+    })
+    .filter(({ comment }) => {
+      if (!comment.nickname && !comment.username) {
+        return false;
+      }
 
-    if (!comment.content && !comment.isSpam) {
-      return false;
-    }
+      if (!comment.content && !comment.isSpam) {
+        return false;
+      }
 
-    return originalStatusId ? !comment.id.includes(`/status/${originalStatusId}`) : true;
-  });
+      return originalStatusId
+        ? !comment.id.includes(`/status/${originalStatusId}`)
+        : true;
+    });
 }
 
 function canCollapseSpamNode(node, article) {
@@ -471,7 +520,11 @@ function canCollapseSpamNode(node, article) {
     return false;
   }
 
-  if (node.matches("main, aside, section, [data-testid='primaryColumn'], [data-testid='sidebarColumn']")) {
+  if (
+    node.matches(
+      "main, aside, section, [data-testid='primaryColumn'], [data-testid='sidebarColumn']",
+    )
+  ) {
     return false;
   }
 
@@ -480,8 +533,12 @@ function canCollapseSpamNode(node, article) {
     return false;
   }
 
-  const articles = node.querySelectorAll?.('article[data-testid="tweet"]') || [];
-  if (articles.length > 1 || (articles.length === 1 && articles[0] !== article)) {
+  const articles =
+    node.querySelectorAll?.('article[data-testid="tweet"]') || [];
+  if (
+    articles.length > 1 ||
+    (articles.length === 1 && articles[0] !== article)
+  ) {
     return false;
   }
 
@@ -494,7 +551,11 @@ function getSpamCollapseNodes(article) {
   const nodes = [];
   const timelineCell = article.closest('[data-testid="cellInnerDiv"]');
 
-  for (let node = article; node && node !== document.body; node = node.parentElement) {
+  for (
+    let node = article;
+    node && node !== document.body;
+    node = node.parentElement
+  ) {
     if (!canCollapseSpamNode(node, article)) {
       if (node === timelineCell || nodes.length > 0) {
         break;
@@ -504,7 +565,11 @@ function getSpamCollapseNodes(article) {
 
     nodes.push(node);
 
-    if (node.parentElement?.matches("[aria-label*='Timeline'], [data-testid='primaryColumn']")) {
+    if (
+      node.parentElement?.matches(
+        "[aria-label*='Timeline'], [data-testid='primaryColumn']",
+      )
+    ) {
       break;
     }
   }
@@ -513,7 +578,9 @@ function getSpamCollapseNodes(article) {
 }
 
 function getConversationTimeline() {
-  return document.querySelector('[aria-label="Timeline: Conversation"], [aria-label*="Timeline: Conversation"]');
+  return document.querySelector(
+    '[aria-label="Timeline: Conversation"], [aria-label*="Timeline: Conversation"]',
+  );
 }
 
 function trimConversationBottomGap() {
@@ -524,8 +591,9 @@ function trimConversationBottomGap() {
     return;
   }
 
-  const visibleArticles = Array.from(timeline.querySelectorAll('article[data-testid="tweet"]'))
-    .filter((article) => !article.closest(".cat-visit-x-hidden-spam-cell"));
+  const visibleArticles = Array.from(
+    timeline.querySelectorAll('article[data-testid="tweet"]'),
+  ).filter((article) => !article.closest(".cat-visit-x-hidden-spam-cell"));
 
   if (visibleArticles.length < 2) {
     return;
@@ -533,7 +601,8 @@ function trimConversationBottomGap() {
 
   const lastVisibleArticle = visibleArticles[visibleArticles.length - 1];
   const timelineTop = timeline.getBoundingClientRect().top + window.scrollY;
-  const lastArticleBottom = lastVisibleArticle.getBoundingClientRect().bottom + window.scrollY;
+  const lastArticleBottom =
+    lastVisibleArticle.getBoundingClientRect().bottom + window.scrollY;
   const trimmedHeight = Math.ceil(lastArticleBottom - timelineTop);
 
   if (trimmedHeight > 0) {
@@ -548,10 +617,24 @@ function removeSpamCommentArticle(article, comment) {
   }
 
   foldedCommentStore.set(comment.id, comment);
-  for (const node of getSpamCollapseNodes(article)) {
+  const nodes = hiddenSpamNodeStore.get(comment.id) || getSpamCollapseNodes(article);
+  hiddenSpamNodeStore.set(comment.id, nodes);
+  for (const node of nodes) {
     node.classList.add("cat-visit-x-hidden-spam-cell");
   }
-  article.remove();
+}
+
+function restoreCommentArticle(comment) {
+  const nodes = hiddenSpamNodeStore.get(comment.id);
+  if (!nodes) {
+    return;
+  }
+
+  for (const node of nodes) {
+    node.classList.remove("cat-visit-x-hidden-spam-cell");
+  }
+  hiddenSpamNodeStore.delete(comment.id);
+  foldedCommentStore.delete(comment.id);
 }
 
 function processVisibleSpam() {
@@ -559,6 +642,8 @@ function processVisibleSpam() {
     commentStore.set(comment.id, comment);
     if (comment.isSpam) {
       removeSpamCommentArticle(article, comment);
+    } else {
+      restoreCommentArticle(comment);
     }
   }
   trimConversationBottomGap();
@@ -675,11 +760,14 @@ function upsertPanel() {
     }
   `;
 
-  panel.querySelector('[data-action="copy"]').addEventListener("click", async () => {
-    const comments = Array.from(commentStore.values());
-    await navigator.clipboard.writeText(JSON.stringify(comments, null, 2));
-    panel.querySelector('[data-role="summary"]').textContent = `Copied ${comments.length} loaded comments as JSON.`;
-  });
+  panel
+    .querySelector('[data-action="copy"]')
+    .addEventListener("click", async () => {
+      const comments = Array.from(commentStore.values());
+      await navigator.clipboard.writeText(JSON.stringify(comments, null, 2));
+      panel.querySelector('[data-role="summary"]').textContent =
+        `Copied ${comments.length} loaded comments as JSON.`;
+    });
   panel.querySelector('[data-action="scan"]').addEventListener("click", () => {
     toggleAutoScan();
   });
@@ -689,30 +777,56 @@ function upsertPanel() {
 }
 
 function findSearchInsertionTarget() {
-  const searchInput = document.querySelector('[data-testid="SearchBox_Search_Input"], input[aria-label="Search query"]');
+  const searchInput = document.querySelector(
+    '[data-testid="SearchBox_Search_Input"], input[aria-label="Search query"]',
+  );
   if (searchInput) {
-    const explicitSearchSection = searchInput.closest('[aria-label="Search"]') || searchInput.closest('[role="search"]');
-    let searchSection = explicitSearchSection;
-
-    for (let node = searchInput; !searchSection && node && node !== document.body; node = node.parentElement) {
-      const nextText = normalizeText(node.nextElementSibling?.innerText || node.nextElementSibling?.textContent || "");
-      if (/^(Relevant people|What.s happening|Subscribe to Premium)/i.test(nextText)) {
-        searchSection = node;
+    for (
+      let node = searchInput;
+      node && node !== document.body;
+      node = node.parentElement
+    ) {
+      const nextText = normalizeText(
+        node.nextElementSibling?.innerText ||
+          node.nextElementSibling?.textContent ||
+          "",
+      );
+      if (
+        /^(Relevant people|What.s happening|Subscribe to Premium)/i.test(
+          nextText,
+        )
+      ) {
+        return {
+          parent: node.parentElement,
+          reference: node.nextElementSibling,
+          position: "beforebegin",
+        };
       }
     }
 
-    const searchBox = searchSection || searchInput.closest('form, [data-testid="SearchBox_Search_Input"]') || searchInput;
+    const explicitSearchSection =
+      searchInput.closest('[aria-label="Search"]') ||
+      searchInput.closest('[role="search"]');
+    const searchSection = explicitSearchSection;
+    const searchBox =
+      searchSection ||
+      searchInput.closest('form, [data-testid="SearchBox_Search_Input"]') ||
+      searchInput;
     return {
       parent: searchBox.parentElement,
-      reference: searchBox
+      reference: searchBox,
+      position: "afterend",
     };
   }
 
-  const sidebar = document.querySelector('aside [data-testid="sidebarColumn"], aside');
+  const sidebar = document.querySelector(
+    'aside [data-testid="sidebarColumn"], aside',
+  );
   return sidebar
     ? {
         parent: sidebar,
-        reference: sidebar.firstElementChild
+        reference: sidebar.firstElementChild,
+        position: "afterend",
       }
     : null;
 }
@@ -738,8 +852,11 @@ function upsertModerationButton() {
 
   if (existingButton) {
     existingButton.textContent = getModerationButtonText();
-    if (target.parent && existingButton.parentElement !== target.parent) {
-      target.reference?.insertAdjacentElement("afterend", existingButton);
+    if (target.reference) {
+      target.reference?.insertAdjacentElement(
+        target.position || "afterend",
+        existingButton,
+      );
     }
     return;
   }
@@ -757,7 +874,10 @@ function upsertModerationButton() {
   });
 
   if (target.reference) {
-    target.reference.insertAdjacentElement("afterend", button);
+    target.reference.insertAdjacentElement(
+      target.position || "afterend",
+      button,
+    );
   } else {
     target.parent.append(button);
   }
@@ -815,7 +935,9 @@ function openModerationModal() {
       username.className = "username";
       username.textContent = comment.username || "(no username)";
       reason.className = "reason";
-      reason.textContent = comment.spamReasons.length ? comment.spamReasons.join(", ") : "spam";
+      reason.textContent = comment.spamReasons.length
+        ? comment.spamReasons.join(", ")
+        : "spam";
       commentText.className = "comment";
       commentText.textContent = comment.content;
 
@@ -823,7 +945,7 @@ function openModerationModal() {
       body.append(user, commentText);
       label.append(checkbox, body);
       return label;
-    })
+    }),
   );
 
   modal.querySelector('[data-action="close"]').addEventListener("click", () => {
@@ -834,23 +956,32 @@ function openModerationModal() {
       modal.remove();
     }
   });
-  modal.querySelector('[data-action="dry-block"]').addEventListener("click", () => {
-    const selectedIds = Array.from(modal.querySelectorAll('input[type="checkbox"]:checked')).map((input) => input.value);
-    const selectedComments = selectedIds
-      .map((id) => foldedCommentStore.get(id))
-      .filter(Boolean);
-    const uniqueUsers = new Map();
+  modal
+    .querySelector('[data-action="dry-block"]')
+    .addEventListener("click", () => {
+      const selectedIds = Array.from(
+        modal.querySelectorAll('input[type="checkbox"]:checked'),
+      ).map((input) => input.value);
+      const selectedComments = selectedIds
+        .map((id) => foldedCommentStore.get(id))
+        .filter(Boolean);
+      const uniqueUsers = new Map();
 
-    for (const comment of selectedComments) {
-      if (comment.username) {
-        uniqueUsers.set(comment.username, comment);
+      for (const comment of selectedComments) {
+        if (comment.username) {
+          uniqueUsers.set(comment.username, comment);
+        }
       }
-    }
 
-    const users = Array.from(uniqueUsers.keys());
-    modal.querySelector('[data-role="block-status"]').textContent = `Dry run: would block ${users.length} users.`;
-    console.info("[Cat Visit X] Dry-run block users:", users, Array.from(uniqueUsers.values()));
-  });
+      const users = Array.from(uniqueUsers.keys());
+      modal.querySelector('[data-role="block-status"]').textContent =
+        `Dry run: would block ${users.length} users.`;
+      console.info(
+        "[Cat Visit X] Dry-run block users:",
+        users,
+        Array.from(uniqueUsers.values()),
+      );
+    });
 
   document.documentElement.append(modal);
 }
@@ -868,7 +999,9 @@ function stopAutoScan(message) {
   autoScanIdleRounds = 0;
   setScanButtonText("Auto Scan");
 
-  const summary = document.getElementById(COMMENT_PANEL_ID)?.querySelector('[data-role="summary"]');
+  const summary = document
+    .getElementById(COMMENT_PANEL_ID)
+    ?.querySelector('[data-role="summary"]');
   if (summary && message) {
     summary.textContent = message;
   }
@@ -896,10 +1029,12 @@ function toggleAutoScan() {
 
     window.scrollBy({
       top: Math.max(600, Math.floor(window.innerHeight * 0.85)),
-      behavior: "smooth"
+      behavior: "smooth",
     });
 
-    const nearBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 80;
+    const nearBottom =
+      window.innerHeight + window.scrollY >=
+      document.documentElement.scrollHeight - 80;
     if (nearBottom && autoScanIdleRounds >= 4) {
       stopAutoScan(`Finished scan with ${commentStore.size} loaded comments.`);
     }
@@ -913,6 +1048,7 @@ function renderComments() {
     document.getElementById(MODERATION_MODAL_ID)?.remove();
     commentStore = new Map();
     foldedCommentStore = new Map();
+    hiddenSpamNodeStore = new Map();
     storedStatusId = "";
     stopAutoScan("");
     return;
@@ -923,6 +1059,7 @@ function renderComments() {
   if (activeStatusId !== storedStatusId) {
     commentStore = new Map();
     foldedCommentStore = new Map();
+    hiddenSpamNodeStore = new Map();
     storedStatusId = activeStatusId;
     stopAutoScan("");
     document.getElementById(MODERATION_MODAL_ID)?.remove();
@@ -967,7 +1104,7 @@ function renderComments() {
       meta.append(nickname, username, premium, spam);
       item.append(meta, content);
       return item;
-    })
+    }),
   );
 }
 
@@ -1005,6 +1142,7 @@ const observer = new MutationObserver(() => {
     currentUrl = window.location.href;
     commentStore = new Map();
     foldedCommentStore = new Map();
+    hiddenSpamNodeStore = new Map();
     storedStatusId = "";
     document.getElementById(MODERATION_MODAL_ID)?.remove();
   }
@@ -1014,7 +1152,28 @@ const observer = new MutationObserver(() => {
 
 observer.observe(document.documentElement, {
   childList: true,
-  subtree: true
+  subtree: true,
 });
 
-scheduleRender();
+async function loadCustomSpamKeywords() {
+  const stored = await chrome.storage.sync.get(CUSTOM_KEYWORDS_STORAGE_KEY);
+  customSpamKeywords = Array.isArray(stored[CUSTOM_KEYWORDS_STORAGE_KEY])
+    ? stored[CUSTOM_KEYWORDS_STORAGE_KEY]
+    : [];
+}
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== "sync" || !changes[CUSTOM_KEYWORDS_STORAGE_KEY]) {
+    return;
+  }
+
+  const nextKeywords = changes[CUSTOM_KEYWORDS_STORAGE_KEY].newValue;
+  customSpamKeywords = Array.isArray(nextKeywords) ? nextKeywords : [];
+  scheduleRender();
+});
+
+loadCustomSpamKeywords()
+  .catch((error) => {
+    console.warn("[Cat Visit X] Could not load custom spam keywords.", error);
+  })
+  .finally(scheduleRender);
