@@ -67,39 +67,71 @@ function ensureStyle() {
   style.id = STYLE_ID;
   style.textContent = `
     #${MODERATION_BUTTON_ID} {
-      display: flex;
+      position: absolute;
+      top: 0;
+      right: 0;
+      z-index: 2;
+      display: grid;
       align-items: center;
-      justify-content: space-between;
-      gap: 12px;
+      justify-content: center;
       box-sizing: border-box;
-      width: 100%;
-      flex: 0 0 auto;
-      min-height: 42px;
-      margin: 8px 0 12px;
-      border: 1px solid transparent;
-      border-radius: 999px;
-      padding: 0 16px;
-      color: #71767b;
-      background: #202327;
-      font: 400 15px/20px Arial, Helvetica, sans-serif;
-      text-align: left;
+      width: var(--cat-visit-x-search-height, 44px);
+      height: var(--cat-visit-x-search-height, 44px);
+      margin: 0;
+      border: 1px solid rgb(51, 54, 57);
+      border-radius: 50%;
+      padding: 0;
+      color: #202124;
+      background: #f7b267;
       cursor: pointer;
     }
 
-    #${MODERATION_BUTTON_ID} .cat-status {
-      flex: 0 0 auto;
-      border-radius: 999px;
-      padding: 2px 8px;
-      color: #202124;
-      background: #f7b267;
-      font-size: 11px;
-      font-weight: 700;
-      line-height: 18px;
+    .cat-visit-x-search-host {
+      position: relative !important;
+      box-sizing: border-box !important;
+      padding-right: calc(var(--cat-visit-x-search-height, 44px) + 8px) !important;
+    }
+
+    #${MODERATION_BUTTON_ID} .cat-icon {
+      position: relative;
+      display: block;
+      box-sizing: border-box;
+      width: 23px;
+      height: 20px;
+      margin-top: 4px;
+      border: 2px solid currentColor;
+      border-radius: 8px;
+    }
+
+    #${MODERATION_BUTTON_ID} .cat-icon::before,
+    #${MODERATION_BUTTON_ID} .cat-icon::after {
+      position: absolute;
+      top: -7px;
+      width: 8px;
+      height: 8px;
+      border-top: 2px solid currentColor;
+      content: "";
+    }
+
+    #${MODERATION_BUTTON_ID} .cat-icon::before {
+      left: 1px;
+      border-left: 2px solid currentColor;
+      transform: rotate(18deg);
+    }
+
+    #${MODERATION_BUTTON_ID} .cat-icon::after {
+      right: 1px;
+      border-right: 2px solid currentColor;
+      transform: rotate(-18deg);
     }
 
     #${MODERATION_BUTTON_ID}:hover {
-      background: #1d2024;
-      border-color: #333639;
+      background: #f5a94e;
+    }
+
+    #${MODERATION_BUTTON_ID}:focus-visible {
+      outline: 2px solid #1d9bf0;
+      outline-offset: 2px;
     }
 
     .cat-visit-x-hidden-spam-cell {
@@ -737,54 +769,20 @@ function findSearchInsertionTarget() {
     '[data-testid="SearchBox_Search_Input"], input[aria-label="Search query"]',
   );
   if (searchInput) {
-    for (
-      let node = searchInput;
-      node && node !== document.body;
-      node = node.parentElement
-    ) {
-      const nextText = normalizeText(
-        node.nextElementSibling?.innerText ||
-          node.nextElementSibling?.textContent ||
-          "",
-      );
-      if (
-        /^(Relevant people|What.s happening|Subscribe to Premium)/i.test(
-          nextText,
-        )
-      ) {
-        return {
-          parent: node.parentElement,
-          reference: node.nextElementSibling,
-          position: "beforebegin",
-        };
-      }
-    }
-
     const explicitSearchSection =
       searchInput.closest('[aria-label="Search"]') ||
       searchInput.closest('[role="search"]');
-    const searchSection = explicitSearchSection;
     const searchBox =
-      searchSection ||
+      explicitSearchSection ||
       searchInput.closest('form, [data-testid="SearchBox_Search_Input"]') ||
       searchInput;
     return {
-      parent: searchBox.parentElement,
-      reference: searchBox,
-      position: "afterend",
+      host: searchBox.parentElement,
+      searchBox,
+      searchInput,
     };
   }
-
-  const sidebar = document.querySelector(
-    'aside [data-testid="sidebarColumn"], aside',
-  );
-  return sidebar
-    ? {
-        parent: sidebar,
-        reference: sidebar.firstElementChild,
-        position: "afterend",
-      }
-    : null;
+  return null;
 }
 
 function getModerationButtonText() {
@@ -792,12 +790,12 @@ function getModerationButtonText() {
 }
 
 function renderModerationButtonContent(button) {
-  const label = document.createElement("span");
-  const status = document.createElement("span");
-  label.textContent = getModerationButtonText();
-  status.className = "cat-status";
-  status.textContent = "Cat is visiting X";
-  button.replaceChildren(label, status);
+  const icon = document.createElement("span");
+  icon.className = "cat-icon";
+  icon.setAttribute("aria-hidden", "true");
+  button.replaceChildren(icon);
+  button.setAttribute("aria-label", getModerationButtonText());
+  button.title = getModerationButtonText();
 }
 
 function upsertModerationButton() {
@@ -811,17 +809,25 @@ function upsertModerationButton() {
   const existingButton = document.getElementById(MODERATION_BUTTON_ID);
   const target = findSearchInsertionTarget();
 
-  if (!target || !target.parent) {
+  if (!target?.host) {
     return;
   }
 
+  const searchHeight = Math.round(
+    target.searchBox.getBoundingClientRect().height ||
+      target.searchInput.getBoundingClientRect().height ||
+      44,
+  );
+  target.host.classList.add("cat-visit-x-search-host");
+  target.host.style.setProperty(
+    "--cat-visit-x-search-height",
+    `${searchHeight}px`,
+  );
+
   if (existingButton) {
     renderModerationButtonContent(existingButton);
-    if (target.reference) {
-      target.reference?.insertAdjacentElement(
-        target.position || "afterend",
-        existingButton,
-      );
+    if (existingButton.parentElement !== target.host) {
+      target.host.append(existingButton);
     }
     return;
   }
@@ -838,14 +844,7 @@ function upsertModerationButton() {
     openModerationModal();
   });
 
-  if (target.reference) {
-    target.reference.insertAdjacentElement(
-      target.position || "afterend",
-      button,
-    );
-  } else {
-    target.parent.append(button);
-  }
+  target.host.append(button);
 }
 
 function openModerationModal() {
