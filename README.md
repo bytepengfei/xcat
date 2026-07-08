@@ -1,4 +1,4 @@
-# Cat Visit X
+# XCat
 
 This is an unpacked Chrome extension that opens `https://x.com/` from its popup and filters unwanted replies on X post pages.
 
@@ -18,15 +18,13 @@ Click **Auto Scan** to scroll the post page and collect more loaded comments aut
 
 Premium fields are inferred from labels that X exposes in the page DOM, such as `Verified account` or `Premium+`. If X does not expose a tier label for a user, the extension cannot reliably distinguish Premium from Premium+.
 
-Spam comments are removed from the visible DOM when the comment content, nickname, or username matches built-in spam signals such as giveaway, airdrop, Telegram/WhatsApp promotion, gambling, adult spam, or common Chinese spam keywords. A **Hidden spam** button is inserted next to the right-side X search box. It opens a list of hidden users and comments with checkboxes.
-
-The extension status badge appears on the right side of the **Hidden spam** bar instead of occupying a separate corner of the page.
+Spam comments are removed from the visible DOM when the comment content, nickname, or username matches built-in spam signals such as giveaway, airdrop, Telegram/WhatsApp promotion, gambling, adult spam, or common Chinese spam keywords. A round cat button is inserted next to the right-side X search box. It opens a list of hidden users and comments with checkboxes.
 
 Open **屏蔽关键词设置** from the extension popup to add custom spam keywords. Enter one keyword per line. The settings are saved with Chrome sync storage and apply to open X pages without reinstalling the extension.
 
 The settings page also includes a switch for the floating X comments panel. Disabling the panel does not disable spam filtering or the **Hidden spam** button.
 
-The **Block selected** button is intentionally dry-run only. It logs the users that would be blocked, but it does not call the X block API.
+Use **Block selected** to review and block the checked spam users through X's native Block controls. Each visible reply also has a crossed-out cat icon next to X's More button for immediately blocking that reply's author. Blocking uses the current X login session and processes users one at a time.
 
 ## Load it in Chrome
 

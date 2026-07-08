@@ -2,6 +2,9 @@ const COMMENT_PANEL_ID = "cat-visit-x-comments";
 const COMMENT_PANEL_STYLE_ID = "cat-visit-x-comments-style";
 const MODERATION_BUTTON_ID = "cat-visit-x-moderation-button";
 const MODERATION_MODAL_ID = "cat-visit-x-moderation-modal";
+const BLOCK_TOAST_ID = "cat-visit-x-block-toast";
+const QUICK_BLOCK_BUTTON_CLASS = "cat-visit-x-quick-block";
+const QUICK_BLOCK_MORE_BUTTON_CLASS = "cat-visit-x-quick-block-more";
 const STYLE_ID = "cat-visit-x-style";
 const STATUS_PAGE_PATTERN = /^\/[^/]+\/status\/\d+/;
 const CUSTOM_KEYWORDS_STORAGE_KEY = "customSpamKeywords";
@@ -44,6 +47,9 @@ let storedStatusId = "";
 let autoScanTimer = 0;
 let autoScanLastCount = 0;
 let autoScanIdleRounds = 0;
+let blockExecutionChain = Promise.resolve();
+const blockingUsernames = new Set();
+const blockInteractionCommentIds = new Set();
 
 function isStatusPage() {
   return STATUS_PAGE_PATTERN.test(window.location.pathname);
@@ -56,6 +62,10 @@ function getStatusId() {
 
 function normalizeText(text) {
   return text.replace(/\s+/g, " ").trim();
+}
+
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function ensureStyle() {
@@ -268,8 +278,98 @@ function ensureStyle() {
       background: #202327;
     }
 
-    #${MODERATION_MODAL_ID} [data-action="dry-block"] {
+    #${MODERATION_MODAL_ID} [data-action="prepare-block"],
+    #${MODERATION_MODAL_ID} [data-action="confirm-block"] {
       background: #f4212e;
+    }
+
+    #${MODERATION_MODAL_ID} button:disabled {
+      opacity: 0.55;
+      cursor: default;
+    }
+
+    .${QUICK_BLOCK_BUTTON_CLASS} {
+      position: relative;
+      display: inline-grid;
+      place-items: center;
+      box-sizing: border-box;
+      width: 34px;
+      height: 34px;
+      margin: 0;
+      border: 0;
+      border-radius: 50%;
+      padding: 0;
+      color: rgb(113, 118, 123);
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .${QUICK_BLOCK_BUTTON_CLASS}:hover {
+      color: rgb(244, 33, 46);
+      background: rgba(244, 33, 46, 0.1);
+    }
+
+    .${QUICK_BLOCK_BUTTON_CLASS}:focus-visible {
+      outline: 2px solid #1d9bf0;
+      outline-offset: 1px;
+    }
+
+    .${QUICK_BLOCK_BUTTON_CLASS}:disabled {
+      cursor: wait;
+      opacity: 0.55;
+    }
+
+    .${QUICK_BLOCK_BUTTON_CLASS} .x-block-icon {
+      display: block;
+      box-sizing: border-box;
+      width: 20px;
+      height: 20px;
+      fill: currentColor;
+    }
+
+    .${QUICK_BLOCK_MORE_BUTTON_CLASS} {
+      box-sizing: border-box !important;
+      display: inline-grid !important;
+      place-items: center !important;
+      width: 34px !important;
+      height: 34px !important;
+      min-width: 34px !important;
+      min-height: 34px !important;
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+
+    .${QUICK_BLOCK_MORE_BUTTON_CLASS} > div {
+      display: grid !important;
+      place-items: center !important;
+      width: 100% !important;
+      height: 100% !important;
+      margin: 0 !important;
+    }
+
+    .${QUICK_BLOCK_MORE_BUTTON_CLASS} svg {
+      display: block !important;
+      margin: 0 !important;
+    }
+
+    #${BLOCK_TOAST_ID} {
+      position: fixed;
+      top: 18px;
+      left: 50%;
+      z-index: 2147483646;
+      max-width: min(520px, calc(100vw - 32px));
+      border-radius: 999px;
+      padding: 10px 16px;
+      color: #e7e9ea;
+      background: #202327;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+      font: 700 13px/18px Arial, Helvetica, sans-serif;
+      text-align: center;
+      transform: translateX(-50%);
+    }
+
+    #${BLOCK_TOAST_ID}[data-kind="error"] {
+      background: #8b111b;
     }
   `;
 
@@ -433,32 +533,7 @@ function buildCommentFromArticle(article) {
 }
 
 function collectVisibleComments() {
-  if (!isStatusPage()) {
-    return [];
-  }
-
-  const main = document.querySelector("main") || document;
-  const articles = Array.from(
-    main.querySelectorAll('article[data-testid="tweet"]'),
-  );
-  const replyArticles = articles.slice(1);
-  const originalStatusId = getStatusId();
-
-  return replyArticles
-    .map((article) => buildCommentFromArticle(article))
-    .filter((comment) => {
-      if (!comment.nickname && !comment.username) {
-        return false;
-      }
-
-      if (!comment.content && !comment.isSpam) {
-        return false;
-      }
-
-      return originalStatusId
-        ? !comment.id.includes(`/status/${originalStatusId}`)
-        : true;
-    });
+  return getVisibleCommentEntries().map(({ comment }) => comment);
 }
 
 function getVisibleCommentEntries() {
@@ -494,7 +569,117 @@ function getVisibleCommentEntries() {
       return originalStatusId
         ? !comment.id.includes(`/status/${originalStatusId}`)
         : true;
-    });
+    })
+    .filter(({ article }) => isCurrentConversationReply(article));
+}
+
+function isCurrentConversationReply(article) {
+  const timeline = getConversationTimeline();
+  if (!timeline) {
+    return true;
+  }
+
+  const cell = article.closest('[data-testid="cellInnerDiv"]') || article;
+  let timelineChild = cell;
+  while (timelineChild.parentElement && timelineChild.parentElement !== timeline) {
+    timelineChild = timelineChild.parentElement;
+  }
+
+  for (const child of Array.from(timeline.children)) {
+    if (child === timelineChild) {
+      return true;
+    }
+
+    const text = normalizeText(child.innerText || child.textContent || "");
+    if (/^Discover more\b/i.test(text)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function isUsableMenuCandidate(element) {
+  if (!(element instanceof HTMLElement)) {
+    return false;
+  }
+
+  if (element.closest(`.${QUICK_BLOCK_BUTTON_CLASS}`)) {
+    return false;
+  }
+
+  const rect = element.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+}
+
+function getElementLabel(element) {
+  return normalizeText(
+    element.getAttribute("aria-label") ||
+      element.innerText ||
+      element.textContent ||
+      "",
+  );
+}
+
+function getSmallestMatchingCandidate(candidates, pattern) {
+  return (
+    candidates.find(
+      (element) =>
+        !Array.from(element.children).some((child) =>
+          pattern.test(getElementLabel(child)),
+        ),
+    ) || null
+  );
+}
+
+function getClickableTarget(element, pattern) {
+  let target = element;
+  let clickableTarget = null;
+
+  while (target) {
+    if (
+      !clickableTarget &&
+      target instanceof HTMLElement &&
+      (target.matches(
+        'button, [role="menuitem"], [role="button"], [tabindex="0"]',
+      ) ||
+        getComputedStyle(target).cursor === "pointer")
+    ) {
+      clickableTarget = target;
+    }
+
+    if (!target.parentElement) {
+      break;
+    }
+
+    const parentText = getElementLabel(target.parentElement);
+    if (!pattern.test(parentText)) {
+      break;
+    }
+
+    target = target.parentElement;
+  }
+
+  return clickableTarget || element;
+}
+
+function pressEscape() {
+  const eventOptions = {
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    key: "Escape",
+    code: "Escape",
+    keyCode: 27,
+    which: 27,
+  };
+  document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", eventOptions));
+  document.dispatchEvent(new KeyboardEvent("keydown", eventOptions));
+  window.dispatchEvent(new KeyboardEvent("keydown", eventOptions));
+}
+
+function closeOpenXMenus() {
+  pressEscape();
 }
 
 function canCollapseSpamNode(node, article) {
@@ -594,7 +779,7 @@ function trimConversationBottomGap() {
 }
 
 function removeSpamCommentArticle(article, comment) {
-  if (!comment.isSpam) {
+  if (!comment.isSpam || blockInteractionCommentIds.has(comment.id)) {
     return;
   }
 
@@ -622,6 +807,7 @@ function restoreCommentArticle(comment) {
 function processVisibleSpam() {
   for (const { article, comment } of getVisibleCommentEntries()) {
     commentStore.set(comment.id, comment);
+    upsertQuickBlockButton(article, comment);
     if (comment.isSpam) {
       removeSpamCommentArticle(article, comment);
     } else {
@@ -629,6 +815,297 @@ function processVisibleSpam() {
     }
   }
   trimConversationBottomGap();
+}
+
+function showBlockToast(message, kind = "info", duration = 3200) {
+  let toast = document.getElementById(BLOCK_TOAST_ID);
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = BLOCK_TOAST_ID;
+    toast.setAttribute("role", "status");
+    document.documentElement.append(toast);
+  }
+
+  toast.dataset.kind = kind;
+  toast.textContent = message;
+  window.clearTimeout(Number(toast.dataset.timer || 0));
+  if (duration > 0) {
+    const timer = window.setTimeout(() => toast.remove(), duration);
+    toast.dataset.timer = String(timer);
+  }
+}
+
+function getArticleForComment(comment) {
+  return Array.from(
+    document.querySelectorAll('article[data-testid="tweet"]'),
+  ).find((article) => getCommentId(article) === comment.id);
+}
+
+function waitForElement(getElement, timeout = 5000) {
+  const existing = getElement();
+  if (existing) {
+    return Promise.resolve(existing);
+  }
+
+  return new Promise((resolve, reject) => {
+    const observer = new MutationObserver(() => {
+      const element = getElement();
+      if (element) {
+        window.clearTimeout(timer);
+        observer.disconnect();
+        resolve(element);
+      }
+    });
+    const timer = window.setTimeout(() => {
+      observer.disconnect();
+      reject(new Error("Timed out waiting for X controls."));
+    }, timeout);
+
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+    });
+  });
+}
+
+function waitForBlockBatchInterval() {
+  const delay = 700 + Math.random() * 600;
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, delay);
+  });
+}
+
+function findMenuItem(pattern, testId) {
+  const byTestId = testId
+    ? Array.from(document.querySelectorAll(`[data-testid="${testId}"]`)).find(
+        (element) => {
+          if (!isUsableMenuCandidate(element)) {
+            return false;
+          }
+          const label = getElementLabel(element);
+          return !label || pattern.test(label);
+        },
+      )
+    : null;
+  if (byTestId) {
+    return byTestId;
+  }
+
+  const candidates = Array.from(
+    document.querySelectorAll(
+      '[role="menuitem"], [role="dialog"] button, [aria-label], body div, body span',
+    ),
+  ).filter(
+    (element) =>
+      isUsableMenuCandidate(element) && pattern.test(getElementLabel(element)),
+  );
+  const target = getSmallestMatchingCandidate(candidates, pattern);
+  return target ? getClickableTarget(target, pattern) : null;
+}
+
+function activateElement(element) {
+  const eventOptions = {
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    view: window,
+    button: 0,
+  };
+  element.dispatchEvent(new PointerEvent("pointerdown", eventOptions));
+  element.dispatchEvent(new MouseEvent("mousedown", eventOptions));
+  element.dispatchEvent(new PointerEvent("pointerup", eventOptions));
+  element.dispatchEvent(new MouseEvent("mouseup", eventOptions));
+  element.click();
+}
+
+function revealCommentForBlock(article, comment) {
+  blockInteractionCommentIds.add(comment.id);
+  const nodes =
+    hiddenSpamNodeStore.get(comment.id) || getSpamCollapseNodes(article);
+  for (const node of nodes) {
+    node.classList.remove("cat-visit-x-hidden-spam-cell");
+  }
+}
+
+function hideBlockedUserComments(username) {
+  const normalizedUsername = username.toLowerCase();
+  for (const [id, comment] of commentStore) {
+    if (comment.username.toLowerCase() !== normalizedUsername) {
+      continue;
+    }
+
+    const article = getArticleForComment(comment);
+    if (article) {
+      const nodes = getSpamCollapseNodes(article);
+      hiddenSpamNodeStore.set(id, nodes);
+      for (const node of nodes) {
+        node.classList.add("cat-visit-x-hidden-spam-cell");
+      }
+    }
+    foldedCommentStore.delete(id);
+  }
+  trimConversationBottomGap();
+  upsertModerationButton();
+}
+
+async function blockUserThroughX(comment) {
+  const username = comment.username;
+  if (!username) {
+    throw new Error("This reply has no username.");
+  }
+
+  const article = getArticleForComment(comment);
+  if (!article) {
+    throw new Error("The reply is no longer loaded.");
+  }
+
+  revealCommentForBlock(article, comment);
+  article.scrollIntoView({ block: "center", behavior: "auto" });
+
+  try {
+    closeOpenXMenus();
+    const menuButton = article.querySelector('[data-testid="caret"]');
+    if (!menuButton) {
+      throw new Error("X More menu was not found.");
+    }
+
+    activateElement(menuButton);
+    const escapedUsername = escapeRegExp(username);
+    const blockPattern = new RegExp(
+      `^(block|屏蔽|封锁|ブロック)\\s+${escapedUsername}(\\b|$)`,
+      "i",
+    );
+    const blockItem = await waitForElement(() =>
+      findMenuItem(blockPattern, "block"),
+    );
+    activateElement(blockItem);
+
+    const confirmButton = await waitForElement(() =>
+      findMenuItem(
+        /^(block|屏蔽|封锁|ブロック)$/i,
+        "confirmationSheetConfirm",
+      ),
+    );
+    activateElement(confirmButton);
+
+    await waitForElement(
+      () => (!document.documentElement.contains(confirmButton) ? document.body : null),
+    );
+    hideBlockedUserComments(username);
+    closeOpenXMenus();
+    return { username, ok: true };
+  } catch (error) {
+    closeOpenXMenus();
+    throw error;
+  } finally {
+    blockInteractionCommentIds.delete(comment.id);
+  }
+}
+
+function enqueueBlock(comment) {
+  const username = comment.username.toLowerCase();
+  if (blockingUsernames.has(username)) {
+    return Promise.resolve({
+      username: comment.username,
+      ok: false,
+      error: "Already being blocked.",
+    });
+  }
+
+  blockingUsernames.add(username);
+  const operation = blockExecutionChain.then(async () => {
+    try {
+      return await blockUserThroughX(comment);
+    } catch (error) {
+      return {
+        username: comment.username,
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    } finally {
+      blockingUsernames.delete(username);
+    }
+  });
+  blockExecutionChain = operation.then(
+    () => undefined,
+    () => undefined,
+  );
+  return operation;
+}
+
+function createQuickBlockIcon() {
+  const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  icon.classList.add("x-block-icon");
+  icon.setAttribute("viewBox", "0 0 24 24");
+  icon.setAttribute("aria-hidden", "true");
+  path.setAttribute(
+    "d",
+    "M12 3.75c-4.55 0-8.25 3.69-8.25 8.25 0 1.92.66 3.68 1.75 5.08L17.09 5.5C15.68 4.4 13.92 3.75 12 3.75zm6.5 3.17L6.92 18.5c1.4 1.1 3.16 1.75 5.08 1.75 4.56 0 8.25-3.69 8.25-8.25 0-1.92-.65-3.68-1.75-5.08zM1.75 12C1.75 6.34 6.34 1.75 12 1.75S22.25 6.34 22.25 12 17.66 22.25 12 22.25 1.75 17.66 1.75 12z",
+  );
+  group.append(path);
+  icon.append(group);
+  return icon;
+}
+
+function upsertQuickBlockButton(article, comment) {
+  const currentUsername = normalizeText(
+    document.querySelector('[data-testid="SideNav_AccountSwitcher_Button"]')
+      ?.innerText || "",
+  )
+    .split(" ")
+    .find((text) => /^@[A-Za-z0-9_]+$/.test(text));
+  if (
+    !comment.username ||
+    comment.username.toLowerCase() === currentUsername?.toLowerCase() ||
+    article.querySelector(`.${QUICK_BLOCK_BUTTON_CLASS}`)
+  ) {
+    return;
+  }
+
+  const menuButton = article.querySelector('[data-testid="caret"]');
+  if (!menuButton?.parentElement) {
+    return;
+  }
+
+  menuButton.classList.add(QUICK_BLOCK_MORE_BUTTON_CLASS);
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = QUICK_BLOCK_BUTTON_CLASS;
+  button.dataset.commentId = comment.id;
+  button.setAttribute("aria-label", `Block ${comment.username}`);
+  button.title = `Block ${comment.username}`;
+  button.append(createQuickBlockIcon());
+  button.addEventListener("mousedown", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+  button.addEventListener("click", async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (button.disabled) {
+      return;
+    }
+
+    button.disabled = true;
+    showBlockToast(`Blocking ${comment.username}…`, "info", 0);
+    const result = await enqueueBlock(comment);
+    if (result.ok) {
+      showBlockToast(`Blocked ${comment.username}.`);
+      return;
+    }
+
+    button.disabled = false;
+    showBlockToast(
+      `Could not block ${comment.username}: ${result.error}`,
+      "error",
+      5000,
+    );
+  });
+
+  menuButton.parentElement.insertBefore(button, menuButton);
 }
 
 function upsertPanel() {
@@ -868,8 +1345,8 @@ function openModerationModal() {
       <p data-role="modal-summary"></p>
       <div data-role="modal-list"></div>
       <footer>
-        <span data-role="block-status">Dry-run mode: X API will not be called.</span>
-        <button type="button" data-action="dry-block">Block selected</button>
+        <span data-role="block-status">Selected users will be blocked on X.</span>
+        <button type="button" data-action="prepare-block">Block selected</button>
       </footer>
     </div>
   `;
@@ -921,30 +1398,107 @@ function openModerationModal() {
     }
   });
   modal
-    .querySelector('[data-action="dry-block"]')
+    .querySelector('[data-action="prepare-block"]')
     .addEventListener("click", () => {
       const selectedIds = Array.from(
         modal.querySelectorAll('input[type="checkbox"]:checked'),
       ).map((input) => input.value);
-      const selectedComments = selectedIds
-        .map((id) => foldedCommentStore.get(id))
-        .filter(Boolean);
       const uniqueUsers = new Map();
 
-      for (const comment of selectedComments) {
-        if (comment.username) {
-          uniqueUsers.set(comment.username, comment);
+      for (const id of selectedIds) {
+        const comment = foldedCommentStore.get(id);
+        if (comment?.username) {
+          uniqueUsers.set(comment.username.toLowerCase(), comment);
         }
       }
 
-      const users = Array.from(uniqueUsers.keys());
-      modal.querySelector('[data-role="block-status"]').textContent =
-        `Dry run: would block ${users.length} users.`;
-      console.info(
-        "[Cat Visit X] Dry-run block users:",
-        users,
-        Array.from(uniqueUsers.values()),
-      );
+      const commentsToBlock = Array.from(uniqueUsers.values());
+      const footer = modal.querySelector("footer");
+      if (commentsToBlock.length === 0) {
+        modal.querySelector('[data-role="block-status"]').textContent =
+          "Select at least one user with a username.";
+        return;
+      }
+
+      const status = document.createElement("span");
+      const actions = document.createElement("div");
+      const cancel = document.createElement("button");
+      const confirm = document.createElement("button");
+      status.dataset.role = "block-status";
+      status.textContent = `Block ${commentsToBlock.length} selected users on X?`;
+      actions.style.display = "flex";
+      actions.style.gap = "8px";
+      cancel.type = "button";
+      cancel.dataset.action = "cancel-block";
+      cancel.textContent = "Cancel";
+      confirm.type = "button";
+      confirm.dataset.action = "confirm-block";
+      confirm.textContent = `Block ${commentsToBlock.length}`;
+      actions.append(cancel, confirm);
+      footer.replaceChildren(status, actions);
+
+      cancel.addEventListener("click", () => openModerationModal());
+      confirm.addEventListener("click", async () => {
+        confirm.disabled = true;
+        cancel.disabled = true;
+        modal.hidden = true;
+
+        const results = [];
+        for (let index = 0; index < commentsToBlock.length; index += 1) {
+          const comment = commentsToBlock[index];
+          if (index > 0) {
+            await waitForBlockBatchInterval();
+          }
+          showBlockToast(
+            `Blocking ${index + 1}/${commentsToBlock.length}: ${comment.username}…`,
+            "info",
+            0,
+          );
+          results.push(await enqueueBlock(comment));
+        }
+
+        const succeeded = results.filter((result) => result.ok);
+        const failed = results.filter((result) => !result.ok);
+        if (foldedCommentStore.size === 0) {
+          modal.remove();
+          showBlockToast(
+            `Block complete: ${succeeded.length} succeeded, ${failed.length} failed.`,
+            failed.length ? "error" : "info",
+            5000,
+          );
+          return;
+        }
+
+        modal.hidden = false;
+        summary.textContent =
+          `Blocked ${succeeded.length} users. ${failed.length} failed.`;
+        list.replaceChildren(
+          ...failed.map((result) => {
+            const row = document.createElement("div");
+            row.style.padding = "12px 18px";
+            row.style.borderBottom = "1px solid #2f3336";
+            row.textContent = `${result.username}: ${result.error}`;
+            return row;
+          }),
+        );
+        footer.replaceChildren();
+        const resultStatus = document.createElement("span");
+        const done = document.createElement("button");
+        resultStatus.dataset.role = "block-status";
+        resultStatus.textContent = failed.length
+          ? "Failed users were not blocked and can be retried."
+          : "All selected users were blocked.";
+        done.type = "button";
+        done.dataset.action = "close";
+        done.textContent = "Done";
+        done.addEventListener("click", () => modal.remove());
+        footer.append(resultStatus, done);
+        showBlockToast(
+          `Block complete: ${succeeded.length} succeeded, ${failed.length} failed.`,
+          failed.length ? "error" : "info",
+          5000,
+        );
+      });
     });
 
   document.documentElement.append(modal);
@@ -1153,6 +1707,6 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 
 loadCustomSpamKeywords()
   .catch((error) => {
-    console.warn("[Cat Visit X] Could not load custom spam keywords.", error);
+    console.warn("[XCat] Could not load custom spam keywords.", error);
   })
   .finally(scheduleRender);

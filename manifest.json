@@ -1,11 +1,23 @@
 {
   "manifest_version": 3,
-  "name": "Cat Visit X",
+  "name": "XCat",
   "description": "Open x.com and filter unwanted replies on post pages.",
-  "version": "1.0.0",
+  "version": "0.1.0",
+  "icons": {
+    "16": "icons/xcat-16.png",
+    "32": "icons/xcat-32.png",
+    "48": "icons/xcat-48.png",
+    "128": "icons/xcat-128.png"
+  },
   "action": {
-    "default_title": "Cat Visit X",
-    "default_popup": "popup.html"
+    "default_title": "XCat",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/xcat-16.png",
+      "32": "icons/xcat-32.png",
+      "48": "icons/xcat-48.png",
+      "128": "icons/xcat-128.png"
+    }
   },
   "options_page": "options.html",
   "permissions": [
