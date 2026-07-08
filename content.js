@@ -8,37 +8,10 @@ const QUICK_BLOCK_MORE_BUTTON_CLASS = "cat-visit-x-quick-block-more";
 const STYLE_ID = "cat-visit-x-style";
 const STATUS_PAGE_PATTERN = /^\/[^/]+\/status\/\d+/;
 const CUSTOM_KEYWORDS_STORAGE_KEY = "customSpamKeywords";
+const SUBSCRIBED_KEYWORDS_STORAGE_KEY = "subscribedSpamKeywords";
 const SHOW_COMMENT_PANEL_STORAGE_KEY = "showCommentPanel";
-const DEFAULT_SPAM_KEYWORDS = [
-  "airdrop",
-  "giveaway",
-  "free mint",
-  "claim now",
-  "whatsapp",
-  "telegram",
-  "t.me/",
-  "discord.gg",
-  "crypto pump",
-  "稳赚",
-  "返利",
-  "薅羊毛",
-  "空投",
-  "兼职",
-  "刷单",
-  "博彩",
-  "开奖",
-  "成人",
-  "约炮",
-  "裸聊",
-  "同城面付",
-  "寻固炮",
-  "固炮",
-  "点击主页",
-  "粉丝",
-  "代充",
-  "同城上门",
-];
 let customSpamKeywords = [];
+let subscribedSpamKeywords = [];
 let showCommentPanel = true;
 let commentStore = new Map();
 let foldedCommentStore = new Map();
@@ -495,21 +468,10 @@ function detectSpam(comment) {
     .toLowerCase();
   const reasons = [];
 
-  for (const keyword of [...DEFAULT_SPAM_KEYWORDS, ...customSpamKeywords]) {
+  for (const keyword of [...customSpamKeywords, ...subscribedSpamKeywords]) {
     if (searchableText.includes(keyword.toLowerCase())) {
       reasons.push(`keyword:${keyword}`);
     }
-  }
-
-  if (
-    /(https?:\/\/|www\.)\S+/i.test(comment.content) &&
-    /(免费|领取|claim|airdrop|giveaway|bonus)/i.test(comment.content)
-  ) {
-    reasons.push("promo-link");
-  }
-
-  if (/(.)\1{8,}/.test(comment.content)) {
-    reasons.push("repeated-characters");
   }
 
   return {
@@ -1687,30 +1649,43 @@ observer.observe(document.documentElement, {
 });
 
 async function loadCustomSpamKeywords() {
-  const stored = await chrome.storage.sync.get([
-    CUSTOM_KEYWORDS_STORAGE_KEY,
-    SHOW_COMMENT_PANEL_STORAGE_KEY,
+  const [syncStored, localStored] = await Promise.all([
+    chrome.storage.sync.get([
+      CUSTOM_KEYWORDS_STORAGE_KEY,
+      SHOW_COMMENT_PANEL_STORAGE_KEY,
+    ]),
+    chrome.storage.local.get([SUBSCRIBED_KEYWORDS_STORAGE_KEY]),
   ]);
-  customSpamKeywords = Array.isArray(stored[CUSTOM_KEYWORDS_STORAGE_KEY])
-    ? stored[CUSTOM_KEYWORDS_STORAGE_KEY]
+  customSpamKeywords = Array.isArray(syncStored[CUSTOM_KEYWORDS_STORAGE_KEY])
+    ? syncStored[CUSTOM_KEYWORDS_STORAGE_KEY]
     : [];
-  showCommentPanel = stored[SHOW_COMMENT_PANEL_STORAGE_KEY] !== false;
+  subscribedSpamKeywords = Array.isArray(
+    localStored[SUBSCRIBED_KEYWORDS_STORAGE_KEY],
+  )
+    ? localStored[SUBSCRIBED_KEYWORDS_STORAGE_KEY]
+    : [];
+  showCommentPanel = syncStored[SHOW_COMMENT_PANEL_STORAGE_KEY] !== false;
 }
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName !== "sync") {
+  if (areaName === "sync") {
+    if (changes[CUSTOM_KEYWORDS_STORAGE_KEY]) {
+      const nextKeywords = changes[CUSTOM_KEYWORDS_STORAGE_KEY].newValue;
+      customSpamKeywords = Array.isArray(nextKeywords) ? nextKeywords : [];
+    }
+    if (changes[SHOW_COMMENT_PANEL_STORAGE_KEY]) {
+      showCommentPanel =
+        changes[SHOW_COMMENT_PANEL_STORAGE_KEY].newValue !== false;
+    }
+    scheduleRender();
     return;
   }
 
-  if (changes[CUSTOM_KEYWORDS_STORAGE_KEY]) {
-    const nextKeywords = changes[CUSTOM_KEYWORDS_STORAGE_KEY].newValue;
-    customSpamKeywords = Array.isArray(nextKeywords) ? nextKeywords : [];
+  if (areaName === "local" && changes[SUBSCRIBED_KEYWORDS_STORAGE_KEY]) {
+    const nextKeywords = changes[SUBSCRIBED_KEYWORDS_STORAGE_KEY].newValue;
+    subscribedSpamKeywords = Array.isArray(nextKeywords) ? nextKeywords : [];
+    scheduleRender();
   }
-  if (changes[SHOW_COMMENT_PANEL_STORAGE_KEY]) {
-    showCommentPanel =
-      changes[SHOW_COMMENT_PANEL_STORAGE_KEY].newValue !== false;
-  }
-  scheduleRender();
 });
 
 loadCustomSpamKeywords()

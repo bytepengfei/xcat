@@ -110,6 +110,22 @@ textarea:focus {
   outline: 3px solid rgba(29, 155, 240, 0.2);
 }
 
+textarea[readonly] {
+  color: #3c4043;
+  background: #f8f9fa;
+}
+
+.field-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.field-heading label {
+  margin: 0;
+}
+
 .hint {
   margin: 8px 0 20px;
   font-size: 13px;
@@ -135,6 +151,11 @@ button {
 
 button:hover {
   background: #3c4043;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: wait;
 }
 
 button.secondary {
