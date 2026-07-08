@@ -18,11 +18,11 @@ Click **Auto Scan** to scroll the post page and collect more loaded comments aut
 
 Premium fields are inferred from labels that X exposes in the page DOM, such as `Verified account` or `Premium+`. If X does not expose a tier label for a user, the extension cannot reliably distinguish Premium from Premium+.
 
-Spam comments are removed from the visible DOM when the comment content, nickname, or username matches built-in spam signals such as giveaway, airdrop, Telegram/WhatsApp promotion, gambling, adult spam, or common Chinese spam keywords. A round cat button is inserted next to the right-side X search box. It opens a list of hidden users and comments with checkboxes.
+Spam comments are muted in place when the comment content, nickname, or username matches built-in spam signals such as giveaway, airdrop, Telegram/WhatsApp promotion, gambling, adult spam, or common Chinese spam keywords. A round cat button is inserted next to the right-side X search box, with a badge that shows the current spam reply count. It opens a list of spam users and comments with checkboxes. Muted replies are re-marked as X virtualizes the timeline during scrolling.
 
 Open **屏蔽关键词设置** from the extension popup to add custom spam keywords. Enter one keyword per line. The settings are saved with Chrome sync storage and apply to open X pages without reinstalling the extension.
 
-The settings page also includes a switch for the floating X comments panel. Disabling the panel does not disable spam filtering or the **Hidden spam** button.
+The settings page also includes a switch for the floating X comments panel. Disabling the panel does not disable spam filtering or the spam list button.
 
 Use **Block selected** to review and block the checked spam users through X's native Block controls. Each visible reply also has a crossed-out cat icon next to X's More button for immediately blocking that reply's author. Blocking uses the current X login session and processes users one at a time.
 

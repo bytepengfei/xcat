@@ -42,7 +42,7 @@ let customSpamKeywords = [];
 let showCommentPanel = true;
 let commentStore = new Map();
 let foldedCommentStore = new Map();
-let hiddenSpamNodeStore = new Map();
+let markedSpamNodeStore = new Map();
 let storedStatusId = "";
 let autoScanTimer = 0;
 let autoScanLastCount = 0;
@@ -135,6 +135,24 @@ function ensureStyle() {
       transform: rotate(-18deg);
     }
 
+    #${MODERATION_BUTTON_ID} .cat-visit-x-count-badge {
+      position: absolute;
+      top: -7px;
+      right: -7px;
+      display: grid;
+      place-items: center;
+      box-sizing: border-box;
+      min-width: 20px;
+      height: 20px;
+      border: 2px solid rgb(0, 0, 0);
+      border-radius: 999px;
+      padding: 0 5px;
+      color: #fff;
+      background: #f4212e;
+      font: 700 11px/1 Arial, Helvetica, sans-serif;
+      pointer-events: none;
+    }
+
     #${MODERATION_BUTTON_ID}:hover {
       background: #f5a94e;
     }
@@ -144,23 +162,15 @@ function ensureStyle() {
       outline-offset: 2px;
     }
 
-    .cat-visit-x-hidden-spam-cell {
-      display: block !important;
-      box-sizing: border-box !important;
-      height: 0 !important;
-      min-height: 0 !important;
-      max-height: 0 !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      border: 0 !important;
-      overflow: hidden !important;
-      pointer-events: none !important;
-      visibility: hidden !important;
+    .cat-visit-x-muted-spam-cell {
+      opacity: 0.38 !important;
+      filter: grayscale(1) saturate(0.35) !important;
+      transition: opacity 160ms ease, filter 160ms ease !important;
     }
 
-    .cat-visit-x-hidden-spam-cell,
-    .cat-visit-x-hidden-spam-cell * {
-      display: none !important;
+    .cat-visit-x-muted-spam-cell:hover,
+    .cat-visit-x-muted-spam-cell:focus-within {
+      opacity: 0.68 !important;
     }
 
     #${MODERATION_MODAL_ID} {
@@ -750,57 +760,45 @@ function getConversationTimeline() {
   );
 }
 
-function trimConversationBottomGap() {
+function clearConversationHeightTrim() {
   const timeline = getConversationTimeline();
-  if (!timeline || foldedCommentStore.size === 0) {
-    timeline?.style.removeProperty("max-height");
-    timeline?.style.removeProperty("overflow");
-    return;
-  }
-
-  const visibleArticles = Array.from(
-    timeline.querySelectorAll('article[data-testid="tweet"]'),
-  ).filter((article) => !article.closest(".cat-visit-x-hidden-spam-cell"));
-
-  if (visibleArticles.length < 2) {
-    return;
-  }
-
-  const lastVisibleArticle = visibleArticles[visibleArticles.length - 1];
-  const timelineTop = timeline.getBoundingClientRect().top + window.scrollY;
-  const lastArticleBottom =
-    lastVisibleArticle.getBoundingClientRect().bottom + window.scrollY;
-  const trimmedHeight = Math.ceil(lastArticleBottom - timelineTop);
-
-  if (trimmedHeight > 0) {
-    timeline.style.setProperty("max-height", `${trimmedHeight}px`, "important");
-    timeline.style.setProperty("overflow", "hidden", "important");
-  }
+  timeline?.style.removeProperty("max-height");
+  timeline?.style.removeProperty("overflow");
 }
 
-function removeSpamCommentArticle(article, comment) {
+function markSpamCommentArticle(article, comment) {
   if (!comment.isSpam || blockInteractionCommentIds.has(comment.id)) {
     return;
   }
 
   foldedCommentStore.set(comment.id, comment);
-  const nodes = hiddenSpamNodeStore.get(comment.id) || getSpamCollapseNodes(article);
-  hiddenSpamNodeStore.set(comment.id, nodes);
+  const previousNodes = markedSpamNodeStore.get(comment.id) || [];
+  const nodes = getSpamCollapseNodes(article);
+  const currentNodeSet = new Set(nodes);
+  for (const node of previousNodes) {
+    if (!currentNodeSet.has(node)) {
+      node.classList.remove("cat-visit-x-muted-spam-cell");
+      node.classList.remove("cat-visit-x-hidden-spam-cell");
+    }
+  }
+  markedSpamNodeStore.set(comment.id, nodes);
   for (const node of nodes) {
-    node.classList.add("cat-visit-x-hidden-spam-cell");
+    node.classList.remove("cat-visit-x-hidden-spam-cell");
+    node.classList.add("cat-visit-x-muted-spam-cell");
   }
 }
 
-function restoreCommentArticle(comment) {
-  const nodes = hiddenSpamNodeStore.get(comment.id);
-  if (!nodes) {
-    return;
-  }
+function restoreCommentArticle(comment, article) {
+  const nodes = [
+    ...(markedSpamNodeStore.get(comment.id) || []),
+    ...(article ? getSpamCollapseNodes(article) : []),
+  ];
 
   for (const node of nodes) {
+    node.classList.remove("cat-visit-x-muted-spam-cell");
     node.classList.remove("cat-visit-x-hidden-spam-cell");
   }
-  hiddenSpamNodeStore.delete(comment.id);
+  markedSpamNodeStore.delete(comment.id);
   foldedCommentStore.delete(comment.id);
 }
 
@@ -809,12 +807,12 @@ function processVisibleSpam() {
     commentStore.set(comment.id, comment);
     upsertQuickBlockButton(article, comment);
     if (comment.isSpam) {
-      removeSpamCommentArticle(article, comment);
+      markSpamCommentArticle(article, comment);
     } else {
-      restoreCommentArticle(comment);
+      restoreCommentArticle(comment, article);
     }
   }
-  trimConversationBottomGap();
+  clearConversationHeightTrim();
 }
 
 function showBlockToast(message, kind = "info", duration = 3200) {
@@ -921,13 +919,14 @@ function activateElement(element) {
 function revealCommentForBlock(article, comment) {
   blockInteractionCommentIds.add(comment.id);
   const nodes =
-    hiddenSpamNodeStore.get(comment.id) || getSpamCollapseNodes(article);
+    markedSpamNodeStore.get(comment.id) || getSpamCollapseNodes(article);
   for (const node of nodes) {
+    node.classList.remove("cat-visit-x-muted-spam-cell");
     node.classList.remove("cat-visit-x-hidden-spam-cell");
   }
 }
 
-function hideBlockedUserComments(username) {
+function markBlockedUserComments(username) {
   const normalizedUsername = username.toLowerCase();
   for (const [id, comment] of commentStore) {
     if (comment.username.toLowerCase() !== normalizedUsername) {
@@ -937,14 +936,15 @@ function hideBlockedUserComments(username) {
     const article = getArticleForComment(comment);
     if (article) {
       const nodes = getSpamCollapseNodes(article);
-      hiddenSpamNodeStore.set(id, nodes);
+      markedSpamNodeStore.set(id, nodes);
       for (const node of nodes) {
-        node.classList.add("cat-visit-x-hidden-spam-cell");
+        node.classList.remove("cat-visit-x-hidden-spam-cell");
+        node.classList.add("cat-visit-x-muted-spam-cell");
       }
     }
     foldedCommentStore.delete(id);
   }
-  trimConversationBottomGap();
+  clearConversationHeightTrim();
   upsertModerationButton();
 }
 
@@ -991,7 +991,7 @@ async function blockUserThroughX(comment) {
     await waitForElement(
       () => (!document.documentElement.contains(confirmButton) ? document.body : null),
     );
-    hideBlockedUserComments(username);
+    markBlockedUserComments(username);
     closeOpenXMenus();
     return { username, ok: true };
   } catch (error) {
@@ -1263,14 +1263,22 @@ function findSearchInsertionTarget() {
 }
 
 function getModerationButtonText() {
-  return `Hidden spam (${foldedCommentStore.size})`;
+  return `Spam replies (${foldedCommentStore.size})`;
+}
+
+function getModerationButtonBadgeText() {
+  return foldedCommentStore.size > 99 ? "99+" : String(foldedCommentStore.size);
 }
 
 function renderModerationButtonContent(button) {
   const icon = document.createElement("span");
+  const badge = document.createElement("span");
   icon.className = "cat-icon";
   icon.setAttribute("aria-hidden", "true");
-  button.replaceChildren(icon);
+  badge.className = "cat-visit-x-count-badge";
+  badge.setAttribute("aria-hidden", "true");
+  badge.textContent = getModerationButtonBadgeText();
+  button.replaceChildren(icon, badge);
   button.setAttribute("aria-label", getModerationButtonText());
   button.title = getModerationButtonText();
 }
@@ -1339,7 +1347,7 @@ function openModerationModal() {
   modal.innerHTML = `
     <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="cat-visit-x-moderation-title">
       <header>
-        <h2 id="cat-visit-x-moderation-title">Hidden spam comments</h2>
+        <h2 id="cat-visit-x-moderation-title">Spam replies</h2>
         <button type="button" data-action="close">Close</button>
       </header>
       <p data-role="modal-summary"></p>
@@ -1354,8 +1362,8 @@ function openModerationModal() {
   const summary = modal.querySelector('[data-role="modal-summary"]');
   const list = modal.querySelector('[data-role="modal-list"]');
   summary.textContent = comments.length
-    ? `${comments.length} hidden comments found on this page.`
-    : "No hidden spam comments on this page yet.";
+    ? `${comments.length} spam replies found on this page.`
+    : "No spam replies on this page yet.";
 
   list.replaceChildren(
     ...comments.map((comment) => {
@@ -1566,7 +1574,7 @@ function renderComments() {
     document.getElementById(MODERATION_MODAL_ID)?.remove();
     commentStore = new Map();
     foldedCommentStore = new Map();
-    hiddenSpamNodeStore = new Map();
+    markedSpamNodeStore = new Map();
     storedStatusId = "";
     stopAutoScan("");
     return;
@@ -1577,7 +1585,7 @@ function renderComments() {
   if (activeStatusId !== storedStatusId) {
     commentStore = new Map();
     foldedCommentStore = new Map();
-    hiddenSpamNodeStore = new Map();
+    markedSpamNodeStore = new Map();
     storedStatusId = activeStatusId;
     stopAutoScan("");
     document.getElementById(MODERATION_MODAL_ID)?.remove();
@@ -1602,7 +1610,7 @@ function renderComments() {
   const summary = panel.querySelector('[data-role="summary"]');
   const list = panel.querySelector('[data-role="list"]');
 
-  summary.textContent = `${comments.length} loaded comments. ${foldedCommentStore.size} hidden as spam.`;
+  summary.textContent = `${comments.length} loaded comments. ${foldedCommentStore.size} marked as spam.`;
   list.replaceChildren(
     ...comments.map((comment) => {
       const item = document.createElement("li");
@@ -1620,7 +1628,7 @@ function renderComments() {
       premium.className = "premium";
       premium.textContent = getPremiumSummary(comment.userInfo);
       spam.className = "premium";
-      spam.textContent = comment.isSpam ? "Hidden spam" : "";
+      spam.textContent = comment.isSpam ? "Marked spam" : "";
       content.className = "content";
       content.textContent = comment.content;
 
@@ -1665,7 +1673,7 @@ const observer = new MutationObserver(() => {
     currentUrl = window.location.href;
     commentStore = new Map();
     foldedCommentStore = new Map();
-    hiddenSpamNodeStore = new Map();
+    markedSpamNodeStore = new Map();
     storedStatusId = "";
     document.getElementById(MODERATION_MODAL_ID)?.remove();
   }
