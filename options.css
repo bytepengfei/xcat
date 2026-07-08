@@ -60,21 +60,27 @@ label {
   font-weight: 700;
 }
 
-.toggle-row {
+.toggle-row,
+.language-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 20px;
   margin: 0;
+}
+
+.toggle-row {
   cursor: pointer;
 }
 
-.toggle-row span {
+.toggle-row span,
+.language-row span {
   display: grid;
   gap: 5px;
 }
 
-.toggle-row small {
+.toggle-row small,
+.language-row small {
   color: #5f6368;
   font-weight: 400;
 }
@@ -103,6 +109,21 @@ textarea {
   color: #202124;
   background: #fff;
   font: 15px/1.6 Arial, Helvetica, sans-serif;
+}
+
+select {
+  min-width: 132px;
+  border: 1px solid #a9a49c;
+  border-radius: 7px;
+  padding: 8px 10px;
+  color: #202124;
+  background: #fff;
+  font: 14px Arial, Helvetica, sans-serif;
+}
+
+select:focus {
+  border-color: #1d9bf0;
+  outline: 3px solid rgba(29, 155, 240, 0.2);
 }
 
 textarea:focus {
@@ -183,5 +204,14 @@ button.secondary:hover {
   header,
   form {
     padding: 22px;
+  }
+
+  .language-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .language-row select {
+    width: 100%;
   }
 }

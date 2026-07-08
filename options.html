@@ -1,54 +1,69 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>XCat 设置</title>
+    <title data-i18n="optionsTitle">XCat settings</title>
     <link rel="stylesheet" href="options.css">
   </head>
   <body>
     <main>
       <header>
         <p class="eyebrow">XCAT</p>
-        <h1>屏蔽关键词设置</h1>
-        <p class="description">评论、昵称或用户名中包含任一关键词时，该评论会被置灰标记。</p>
+        <h1 data-i18n="settingsHeading">Keyword settings</h1>
+        <p class="description" data-i18n="settingsDescription">Replies are muted when the comment, display name, or username contains any keyword.</p>
       </header>
 
       <form id="settings-form">
+        <label class="language-row" for="display-language">
+          <span>
+            <strong data-i18n="displayLanguageLabel">Display language</strong>
+            <small data-i18n="displayLanguageHint">Auto follows Chrome's display language and falls back to English.</small>
+          </span>
+          <select id="display-language">
+            <option value="auto" data-i18n="languageAuto">Auto</option>
+            <option value="en" data-i18n="languageEnglish">English</option>
+            <option value="zh" data-i18n="languageChinese">Chinese</option>
+          </select>
+        </label>
+
+        <hr>
+
         <label class="toggle-row" for="show-comment-panel">
           <span>
-            <strong>显示右侧评论浮窗</strong>
-            <small>关闭后仍会继续过滤垃圾评论。</small>
+            <strong data-i18n="commentPanelLabel">Show right-side comments panel</strong>
+            <small data-i18n="commentPanelHint">Filtering still runs when the panel is hidden.</small>
           </span>
           <input id="show-comment-panel" type="checkbox">
         </label>
 
         <hr>
 
-        <label for="keywords">自定义关键词</label>
-        <textarea id="keywords" rows="12" spellcheck="false" placeholder="每行输入一个关键词"></textarea>
-        <p class="hint">每行一个关键词，不区分大小写。未配置关键词时不会自动标记垃圾回复。</p>
+        <label for="keywords" data-i18n="customKeywordsLabel">Custom keywords</label>
+        <textarea id="keywords" rows="12" spellcheck="false" placeholder="Enter one keyword per line" data-i18n-placeholder="customKeywordsPlaceholder"></textarea>
+        <p class="hint" data-i18n="customKeywordsHint">One keyword per line, case-insensitive. No replies are marked when no keywords are configured.</p>
 
         <hr>
 
         <div class="field-heading">
-          <label for="subscription-urls">关键词订阅</label>
-          <button id="sync-subscriptions" class="secondary" type="button">同步</button>
+          <label for="subscription-urls" data-i18n="subscriptionLabel">Keyword subscriptions</label>
+          <button id="sync-subscriptions" class="secondary" type="button" data-i18n="syncSubscriptions">Sync</button>
         </div>
-        <textarea id="subscription-urls" rows="5" spellcheck="false" placeholder="每行输入一个订阅链接"></textarea>
-        <p class="hint">订阅内容按行解析关键词，空行和以 # 开头的行会被忽略。</p>
+        <textarea id="subscription-urls" rows="5" spellcheck="false" placeholder="Enter one subscription URL per line" data-i18n-placeholder="subscriptionUrlsPlaceholder"></textarea>
+        <p class="hint" data-i18n="subscriptionUrlsHint">Subscription content is parsed line by line. Blank lines and lines starting with # are ignored.</p>
 
-        <label for="subscription-preview">订阅关键词预览</label>
-        <textarea id="subscription-preview" rows="8" readonly spellcheck="false" placeholder="同步后在这里预览订阅关键词"></textarea>
-        <p class="hint">预览内容来自最近一次同步，会和自定义关键词一起用于标记垃圾回复。</p>
+        <label for="subscription-preview" data-i18n="subscriptionPreviewLabel">Subscription keyword preview</label>
+        <textarea id="subscription-preview" rows="8" readonly spellcheck="false" placeholder="Synced subscription keywords appear here" data-i18n-placeholder="subscriptionPreviewPlaceholder"></textarea>
+        <p class="hint" data-i18n="subscriptionPreviewHint">Preview content comes from the latest sync and is used together with custom keywords.</p>
 
         <div class="actions">
-          <button type="submit">保存设置</button>
-          <button id="clear-keywords" class="secondary" type="button">清空自定义关键词</button>
+          <button type="submit" data-i18n="saveSettings">Save settings</button>
+          <button id="clear-keywords" class="secondary" type="button" data-i18n="clearKeywords">Clear custom keywords</button>
         </div>
         <p id="status" class="status" role="status" aria-live="polite"></p>
       </form>
     </main>
+    <script src="i18n.js"></script>
     <script src="options.js"></script>
   </body>
 </html>

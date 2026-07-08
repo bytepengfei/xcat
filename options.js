@@ -8,6 +8,7 @@ const subscriptionUrlsInput = document.getElementById("subscription-urls");
 const subscriptionPreviewInput = document.getElementById("subscription-preview");
 const syncSubscriptionsButton = document.getElementById("sync-subscriptions");
 const showCommentPanelInput = document.getElementById("show-comment-panel");
+const displayLanguageInput = document.getElementById("display-language");
 const clearButton = document.getElementById("clear-keywords");
 const statusText = document.getElementById("status");
 
@@ -45,16 +46,21 @@ async function fetchSubscriptionKeywords(url) {
   try {
     parsedUrl = new URL(url);
   } catch {
-    throw new Error(`无效链接：${url}`);
+    throw new Error(XCatI18n.t("invalidUrl", { url }));
   }
 
   if (!["http:", "https:"].includes(parsedUrl.protocol)) {
-    throw new Error(`仅支持 http/https：${url}`);
+    throw new Error(XCatI18n.t("unsupportedProtocol", { url }));
   }
 
   const response = await fetch(parsedUrl.href, { cache: "no-store" });
   if (!response.ok) {
-    throw new Error(`${getUrlOriginLabel(url)} 返回 ${response.status}`);
+    throw new Error(
+      XCatI18n.t("responseStatus", {
+        origin: getUrlOriginLabel(url),
+        status: response.status,
+      }),
+    );
   }
 
   return parseLines(await response.text(), { ignoreComments: true });
@@ -94,8 +100,10 @@ async function saveSettings() {
   });
   keywordsInput.value = keywords.join("\n");
   subscriptionUrlsInput.value = subscriptionUrls.join("\n");
-  statusText.textContent =
-    `已保存 ${keywords.length} 个自定义关键词和 ${subscriptionUrls.length} 个订阅链接。`;
+  statusText.textContent = XCatI18n.t("statusSaved", {
+    keywordCount: keywords.length,
+    subscriptionCount: subscriptionUrls.length,
+  });
 }
 
 async function syncSubscriptions() {
@@ -126,51 +134,72 @@ async function syncSubscriptions() {
   subscriptionPreviewInput.value = subscribedKeywords.join("\n");
 
   if (failures.length) {
-    statusText.textContent =
-      `已同步 ${subscribedKeywords.length} 个订阅关键词，${failures.length} 个链接失败：${failures.join("；")}`;
+    statusText.textContent = XCatI18n.t("statusSyncedWithFailures", {
+      keywordCount: subscribedKeywords.length,
+      failureCount: failures.length,
+      failures: failures.join(
+        XCatI18n.getCurrentLanguage() === "zh" ? "；" : "; ",
+      ),
+    });
     return;
   }
 
-  statusText.textContent =
-    `已同步 ${subscribedKeywords.length} 个订阅关键词。`;
+  statusText.textContent = XCatI18n.t("statusSynced", {
+    keywordCount: subscribedKeywords.length,
+  });
 }
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
-  statusText.textContent = "正在保存…";
+  statusText.textContent = XCatI18n.t("statusSaving");
 
   try {
     await saveSettings();
   } catch (error) {
-    statusText.textContent = "保存失败，请重试。";
+    statusText.textContent = XCatI18n.t("statusSaveFailed");
   }
 });
 
 clearButton.addEventListener("click", async () => {
   keywordsInput.value = "";
-  statusText.textContent = "正在保存…";
+  statusText.textContent = XCatI18n.t("statusSaving");
 
   try {
     await saveSettings();
   } catch (error) {
-    statusText.textContent = "保存失败，请重试。";
+    statusText.textContent = XCatI18n.t("statusSaveFailed");
   }
 });
 
 syncSubscriptionsButton.addEventListener("click", async () => {
   syncSubscriptionsButton.disabled = true;
-  statusText.textContent = "正在同步订阅…";
+  statusText.textContent = XCatI18n.t("statusSyncing");
 
   try {
     await syncSubscriptions();
   } catch (error) {
-    statusText.textContent =
-      error instanceof Error ? `同步失败：${error.message}` : "同步失败，请重试。";
+    statusText.textContent = error instanceof Error
+      ? XCatI18n.t("statusSyncFailedWithError", { message: error.message })
+      : XCatI18n.t("statusSyncFailed");
   } finally {
     syncSubscriptionsButton.disabled = false;
   }
 });
 
-loadSettings().catch(() => {
-  statusText.textContent = "读取设置失败，请重新打开此页面。";
+displayLanguageInput.addEventListener("change", async () => {
+  await XCatI18n.save(displayLanguageInput.value);
+  XCatI18n.apply();
+  displayLanguageInput.value = XCatI18n.getCurrentPreference();
+  statusText.textContent = XCatI18n.t("statusLanguageSaved");
+});
+
+async function initialize() {
+  displayLanguageInput.value = await XCatI18n.load();
+  XCatI18n.apply();
+  displayLanguageInput.value = XCatI18n.getCurrentPreference();
+  await loadSettings();
+}
+
+initialize().catch(() => {
+  statusText.textContent = XCatI18n.t("statusLoadingFailed");
 });
