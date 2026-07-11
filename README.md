@@ -18,13 +18,13 @@ Click **Auto Scan** to scroll the post page and collect more loaded comments aut
 
 Premium fields are inferred from labels that X exposes in the page DOM, such as `Verified account` or `Premium+`. If X does not expose a tier label for a user, the extension cannot reliably distinguish Premium from Premium+.
 
-Spam comments are muted in place when the comment content, nickname, or username matches a custom keyword configured in the settings page. A round cat button is inserted next to the right-side X search box, with a badge that shows the current spam reply count. It opens a list of spam users and comments with checkboxes. Muted replies are re-marked as X virtualizes the timeline during scrolling.
+Spam comments are replaced with an equal-height placeholder in the X timeline when the comment content, nickname, or username matches a custom keyword configured in the settings page. Keeping the reply cell's height prevents X's virtualized timeline from shifting while scrolling. A round cat button is inserted next to the right-side X search box, with a badge that shows the current spam reply count. It opens a list of spam users and comments with checkboxes.
 
 Open **Keyword settings** from the extension popup to add custom spam keywords. Enter one keyword per line. The settings are saved with Chrome sync storage and apply to open X pages without reinstalling the extension. XCat does not ship built-in spam keywords. The settings page also supports keyword subscription URLs: enter one URL per line, click **Sync**, and XCat fetches those lists into a read-only preview. Subscription keywords are cached locally and used together with custom keywords.
 
 The settings page also includes a switch for the floating X comments panel. Disabling the panel does not disable spam filtering or the spam list button.
 
-Use **Block selected** to review and block the checked spam users through X's native Block controls. Each visible reply also has a crossed-out cat icon next to X's More button for immediately blocking that reply's author. Blocking uses the current X login session and processes users one at a time.
+Use **Block selected** to review and block the checked spam users through X's native Block controls. Each visible reply also has a crossed-out icon next to X's More button for immediately blocking that reply's author. Blocking uses the current X login session and processes users one at a time.
 
 ## Load it in Chrome
 

@@ -4,25 +4,35 @@ const MODERATION_BUTTON_ID = "cat-visit-x-moderation-button";
 const MODERATION_MODAL_ID = "cat-visit-x-moderation-modal";
 const BLOCK_TOAST_ID = "cat-visit-x-block-toast";
 const QUICK_BLOCK_BUTTON_CLASS = "cat-visit-x-quick-block";
-const QUICK_BLOCK_MORE_BUTTON_CLASS = "cat-visit-x-quick-block-more";
+const QUICK_BLOCK_HOST_CLASS = "cat-visit-x-quick-block-host";
 const STYLE_ID = "cat-visit-x-style";
 const STATUS_PAGE_PATTERN = /^\/[^/]+\/status\/\d+/;
 const CUSTOM_KEYWORDS_STORAGE_KEY = "customSpamKeywords";
 const SUBSCRIBED_KEYWORDS_STORAGE_KEY = "subscribedSpamKeywords";
 const SHOW_COMMENT_PANEL_STORAGE_KEY = "showCommentPanel";
+const OWN_ELEMENT_SELECTOR = [
+  `#${COMMENT_PANEL_ID}`,
+  `#${COMMENT_PANEL_STYLE_ID}`,
+  `#${MODERATION_BUTTON_ID}`,
+  `#${MODERATION_MODAL_ID}`,
+  `#${BLOCK_TOAST_ID}`,
+  `#${STYLE_ID}`,
+  `.${QUICK_BLOCK_BUTTON_CLASS}`,
+].join(",");
 let customSpamKeywords = [];
 let subscribedSpamKeywords = [];
 let showCommentPanel = true;
 let commentStore = new Map();
 let foldedCommentStore = new Map();
-let markedSpamNodeStore = new Map();
+let hiddenSpamNodeStore = new Map();
+let hiddenSpamNodeOwners = new WeakMap();
 let storedStatusId = "";
 let autoScanTimer = 0;
 let autoScanLastCount = 0;
 let autoScanIdleRounds = 0;
 let blockExecutionChain = Promise.resolve();
+let lastScrollAt = 0;
 const blockingUsernames = new Set();
-const blockInteractionCommentIds = new Set();
 
 function isStatusPage() {
   return STATUS_PAGE_PATTERN.test(window.location.pathname);
@@ -135,15 +145,28 @@ function ensureStyle() {
       outline-offset: 2px;
     }
 
-    .cat-visit-x-muted-spam-cell {
-      opacity: 0.38 !important;
-      filter: grayscale(1) saturate(0.35) !important;
-      transition: opacity 160ms ease, filter 160ms ease !important;
+    .cat-visit-x-hidden-spam-cell {
+      position: relative !important;
     }
 
-    .cat-visit-x-muted-spam-cell:hover,
-    .cat-visit-x-muted-spam-cell:focus-within {
-      opacity: 0.68 !important;
+    .cat-visit-x-hidden-spam-cell > * {
+      visibility: hidden !important;
+      pointer-events: none !important;
+    }
+
+    .cat-visit-x-hidden-spam-cell::after {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      display: grid;
+      place-items: center;
+      box-sizing: border-box;
+      padding: 16px 24px;
+      color: rgb(113, 118, 123);
+      content: "Spam reply hidden";
+      font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      text-align: center;
+      pointer-events: none;
     }
 
     #${MODERATION_MODAL_ID} {
@@ -272,7 +295,10 @@ function ensureStyle() {
     }
 
     .${QUICK_BLOCK_BUTTON_CLASS} {
-      position: relative;
+      position: absolute;
+      top: 50%;
+      right: calc(100% + 28px);
+      z-index: 1;
       display: inline-grid;
       place-items: center;
       box-sizing: border-box;
@@ -285,6 +311,7 @@ function ensureStyle() {
       color: rgb(113, 118, 123);
       background: transparent;
       cursor: pointer;
+      transform: translateY(-50%);
     }
 
     .${QUICK_BLOCK_BUTTON_CLASS}:hover {
@@ -310,29 +337,8 @@ function ensureStyle() {
       fill: currentColor;
     }
 
-    .${QUICK_BLOCK_MORE_BUTTON_CLASS} {
-      box-sizing: border-box !important;
-      display: inline-grid !important;
-      place-items: center !important;
-      width: 34px !important;
-      height: 34px !important;
-      min-width: 34px !important;
-      min-height: 34px !important;
-      padding: 0 !important;
-      margin: 0 !important;
-    }
-
-    .${QUICK_BLOCK_MORE_BUTTON_CLASS} > div {
-      display: grid !important;
-      place-items: center !important;
-      width: 100% !important;
-      height: 100% !important;
-      margin: 0 !important;
-    }
-
-    .${QUICK_BLOCK_MORE_BUTTON_CLASS} svg {
-      display: block !important;
-      margin: 0 !important;
+    .${QUICK_BLOCK_HOST_CLASS} {
+      position: relative !important;
     }
 
     #${BLOCK_TOAST_ID} {
@@ -504,10 +510,6 @@ function buildCommentFromArticle(article) {
   };
 }
 
-function collectVisibleComments() {
-  return getVisibleCommentEntries().map(({ comment }) => comment);
-}
-
 function getVisibleCommentEntries() {
   if (!isStatusPage()) {
     return [];
@@ -520,7 +522,6 @@ function getVisibleCommentEntries() {
   const originalStatusId = getStatusId();
 
   return articles
-    .slice(1)
     .map((article) => {
       const comment = buildCommentFromArticle(article);
 
@@ -553,7 +554,10 @@ function isCurrentConversationReply(article) {
 
   const cell = article.closest('[data-testid="cellInnerDiv"]') || article;
   let timelineChild = cell;
-  while (timelineChild.parentElement && timelineChild.parentElement !== timeline) {
+  while (
+    timelineChild.parentElement &&
+    timelineChild.parentElement !== timeline
+  ) {
     timelineChild = timelineChild.parentElement;
   }
 
@@ -645,7 +649,9 @@ function pressEscape() {
     keyCode: 27,
     which: 27,
   };
-  document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", eventOptions));
+  document.activeElement?.dispatchEvent(
+    new KeyboardEvent("keydown", eventOptions),
+  );
   document.dispatchEvent(new KeyboardEvent("keydown", eventOptions));
   window.dispatchEvent(new KeyboardEvent("keydown", eventOptions));
 }
@@ -654,127 +660,99 @@ function closeOpenXMenus() {
   pressEscape();
 }
 
-function canCollapseSpamNode(node, article) {
-  if (!node || node === document.body || node === document.documentElement) {
-    return false;
-  }
-
-  if (
-    node.matches(
-      "main, aside, section, [data-testid='primaryColumn'], [data-testid='sidebarColumn']",
-    )
-  ) {
-    return false;
-  }
-
-  const ariaLabel = node.getAttribute("aria-label") || "";
-  if (/timeline|conversation|primary|trending/i.test(ariaLabel)) {
-    return false;
-  }
-
-  const articles =
-    node.querySelectorAll?.('article[data-testid="tweet"]') || [];
-  if (
-    articles.length > 1 ||
-    (articles.length === 1 && articles[0] !== article)
-  ) {
-    return false;
-  }
-
-  const articleHeight = Math.max(article.getBoundingClientRect().height, 1);
-  const nodeHeight = node.getBoundingClientRect().height;
-  return nodeHeight > 0 && nodeHeight <= Math.max(articleHeight + 220, 900);
-}
-
-function getSpamCollapseNodes(article) {
-  const nodes = [];
-  const timelineCell = article.closest('[data-testid="cellInnerDiv"]');
-
-  for (
-    let node = article;
-    node && node !== document.body;
-    node = node.parentElement
-  ) {
-    if (!canCollapseSpamNode(node, article)) {
-      if (node === timelineCell || nodes.length > 0) {
-        break;
-      }
-      continue;
-    }
-
-    nodes.push(node);
-
-    if (
-      node.parentElement?.matches(
-        "[aria-label*='Timeline'], [data-testid='primaryColumn']",
-      )
-    ) {
-      break;
-    }
-  }
-
-  return nodes.length ? nodes : [timelineCell || article];
-}
-
 function getConversationTimeline() {
   return document.querySelector(
     '[aria-label="Timeline: Conversation"], [aria-label*="Timeline: Conversation"]',
   );
 }
 
-function clearConversationHeightTrim() {
-  const timeline = getConversationTimeline();
-  timeline?.style.removeProperty("max-height");
-  timeline?.style.removeProperty("overflow");
+function storeSpamComment(comment) {
+  foldedCommentStore.set(comment.id, comment);
 }
 
-function markSpamCommentArticle(article, comment) {
-  if (!comment.isSpam || blockInteractionCommentIds.has(comment.id)) {
+function getSpamHideNode(article) {
+  return article.closest('[data-testid="cellInnerDiv"]') || article;
+}
+
+function clearHiddenSpamNode(node) {
+  if (!node) {
     return;
   }
 
-  foldedCommentStore.set(comment.id, comment);
-  const previousNodes = markedSpamNodeStore.get(comment.id) || [];
-  const nodes = getSpamCollapseNodes(article);
-  const currentNodeSet = new Set(nodes);
-  for (const node of previousNodes) {
-    if (!currentNodeSet.has(node)) {
-      node.classList.remove("cat-visit-x-muted-spam-cell");
-      node.classList.remove("cat-visit-x-hidden-spam-cell");
-    }
+  const previousCommentId = hiddenSpamNodeOwners.get(node);
+  if (previousCommentId && hiddenSpamNodeStore.get(previousCommentId) === node) {
+    hiddenSpamNodeStore.delete(previousCommentId);
   }
-  markedSpamNodeStore.set(comment.id, nodes);
-  for (const node of nodes) {
-    node.classList.remove("cat-visit-x-hidden-spam-cell");
-    node.classList.add("cat-visit-x-muted-spam-cell");
-  }
+
+  hiddenSpamNodeOwners.delete(node);
+  node.classList.remove("cat-visit-x-hidden-spam-cell");
 }
 
-function restoreCommentArticle(comment, article) {
-  const nodes = [
-    ...(markedSpamNodeStore.get(comment.id) || []),
-    ...(article ? getSpamCollapseNodes(article) : []),
-  ];
+function hideSpamComment(article, comment) {
+  storeSpamComment(comment);
 
-  for (const node of nodes) {
-    node.classList.remove("cat-visit-x-muted-spam-cell");
-    node.classList.remove("cat-visit-x-hidden-spam-cell");
+  const previousNode = hiddenSpamNodeStore.get(comment.id);
+  const node = getSpamHideNode(article);
+  if (previousNode && previousNode !== node) {
+    clearHiddenSpamNode(previousNode);
   }
-  markedSpamNodeStore.delete(comment.id);
+
+  // X recycles timeline cells while scrolling. Clear a prior reply's ownership
+  // before marking this cell so a reused node cannot stay hidden incorrectly.
+  clearHiddenSpamNode(node);
+  hiddenSpamNodeStore.set(comment.id, node);
+  hiddenSpamNodeOwners.set(node, comment.id);
+  node.classList.add("cat-visit-x-hidden-spam-cell");
+}
+
+function clearSpamComment(comment, article) {
+  const nodes = [
+    hiddenSpamNodeStore.get(comment.id),
+    article ? getSpamHideNode(article) : null,
+  ].filter(Boolean);
+
+  for (const node of new Set(nodes)) {
+    clearHiddenSpamNode(node);
+  }
+
+  hiddenSpamNodeStore.delete(comment.id);
   foldedCommentStore.delete(comment.id);
 }
 
+function clearHiddenSpamNodes() {
+  for (const node of hiddenSpamNodeStore.values()) {
+    clearHiddenSpamNode(node);
+  }
+  hiddenSpamNodeStore = new Map();
+  hiddenSpamNodeOwners = new WeakMap();
+}
+
+function revealSpamCommentForBlock(article, comment) {
+  const nodes = [
+    hiddenSpamNodeStore.get(comment.id),
+    getSpamHideNode(article),
+  ].filter(Boolean);
+
+  for (const node of new Set(nodes)) {
+    clearHiddenSpamNode(node);
+  }
+
+  hiddenSpamNodeStore.delete(comment.id);
+}
+
 function processVisibleSpam() {
+  const comments = [];
   for (const { article, comment } of getVisibleCommentEntries()) {
+    comments.push(comment);
     commentStore.set(comment.id, comment);
     upsertQuickBlockButton(article, comment);
     if (comment.isSpam) {
-      markSpamCommentArticle(article, comment);
+      hideSpamComment(article, comment);
     } else {
-      restoreCommentArticle(comment, article);
+      clearSpamComment(comment, article);
     }
   }
-  clearConversationHeightTrim();
+  return comments;
 }
 
 function showBlockToast(message, kind = "info", duration = 3200) {
@@ -878,35 +856,22 @@ function activateElement(element) {
   element.click();
 }
 
-function revealCommentForBlock(article, comment) {
-  blockInteractionCommentIds.add(comment.id);
-  const nodes =
-    markedSpamNodeStore.get(comment.id) || getSpamCollapseNodes(article);
-  for (const node of nodes) {
-    node.classList.remove("cat-visit-x-muted-spam-cell");
-    node.classList.remove("cat-visit-x-hidden-spam-cell");
-  }
+function isElementInViewport(element) {
+  const rect = element.getBoundingClientRect();
+  return rect.top >= 0 && rect.bottom <= window.innerHeight;
 }
 
-function markBlockedUserComments(username) {
+function cleanupBlockedUserComments(username) {
   const normalizedUsername = username.toLowerCase();
   for (const [id, comment] of commentStore) {
     if (comment.username.toLowerCase() !== normalizedUsername) {
       continue;
     }
 
-    const article = getArticleForComment(comment);
-    if (article) {
-      const nodes = getSpamCollapseNodes(article);
-      markedSpamNodeStore.set(id, nodes);
-      for (const node of nodes) {
-        node.classList.remove("cat-visit-x-hidden-spam-cell");
-        node.classList.add("cat-visit-x-muted-spam-cell");
-      }
-    }
-    foldedCommentStore.delete(id);
+    clearSpamComment(comment);
+    commentStore.delete(id);
   }
-  clearConversationHeightTrim();
+
   upsertModerationButton();
 }
 
@@ -921,8 +886,11 @@ async function blockUserThroughX(comment) {
     throw new Error("The reply is no longer loaded.");
   }
 
-  revealCommentForBlock(article, comment);
-  article.scrollIntoView({ block: "center", behavior: "auto" });
+  revealSpamCommentForBlock(article, comment);
+
+  if (!isElementInViewport(article)) {
+    article.scrollIntoView({ block: "center", behavior: "auto" });
+  }
 
   try {
     closeOpenXMenus();
@@ -943,24 +911,22 @@ async function blockUserThroughX(comment) {
     activateElement(blockItem);
 
     const confirmButton = await waitForElement(() =>
-      findMenuItem(
-        /^(block|屏蔽|封锁|ブロック)$/i,
-        "confirmationSheetConfirm",
-      ),
+      findMenuItem(/^(block|屏蔽|封锁|ブロック)$/i, "confirmationSheetConfirm"),
     );
     activateElement(confirmButton);
 
-    await waitForElement(
-      () => (!document.documentElement.contains(confirmButton) ? document.body : null),
+    await waitForElement(() =>
+      !document.documentElement.contains(confirmButton) ? document.body : null,
     );
-    markBlockedUserComments(username);
+    cleanupBlockedUserComments(username);
     closeOpenXMenus();
     return { username, ok: true };
   } catch (error) {
+    if (comment.isSpam) {
+      hideSpamComment(article, comment);
+    }
     closeOpenXMenus();
     throw error;
-  } finally {
-    blockInteractionCommentIds.delete(comment.id);
   }
 }
 
@@ -1018,11 +984,14 @@ function upsertQuickBlockButton(article, comment) {
   )
     .split(" ")
     .find((text) => /^@[A-Za-z0-9_]+$/.test(text));
+  const existingButton = article.querySelector(
+    `.${QUICK_BLOCK_BUTTON_CLASS}`,
+  );
   if (
     !comment.username ||
-    comment.username.toLowerCase() === currentUsername?.toLowerCase() ||
-    article.querySelector(`.${QUICK_BLOCK_BUTTON_CLASS}`)
+    comment.username.toLowerCase() === currentUsername?.toLowerCase()
   ) {
+    existingButton?.remove();
     return;
   }
 
@@ -1031,7 +1000,19 @@ function upsertQuickBlockButton(article, comment) {
     return;
   }
 
-  menuButton.classList.add(QUICK_BLOCK_MORE_BUTTON_CLASS);
+  const host = menuButton.parentElement;
+  host.classList.add(QUICK_BLOCK_HOST_CLASS);
+
+  if (existingButton) {
+    existingButton.dataset.commentId = comment.id;
+    existingButton.setAttribute("aria-label", `Block ${comment.username}`);
+    existingButton.title = `Block ${comment.username}`;
+    existingButton.disabled = false;
+    if (existingButton.parentElement !== host) {
+      host.insertBefore(existingButton, menuButton);
+    }
+    return;
+  }
 
   const button = document.createElement("button");
   button.type = "button";
@@ -1051,23 +1032,29 @@ function upsertQuickBlockButton(article, comment) {
       return;
     }
 
+    const activeComment = commentStore.get(button.dataset.commentId || "");
+    if (!activeComment) {
+      showBlockToast("This reply is no longer loaded.", "error", 5000);
+      return;
+    }
+
     button.disabled = true;
-    showBlockToast(`Blocking ${comment.username}…`, "info", 0);
-    const result = await enqueueBlock(comment);
+    showBlockToast(`Blocking ${activeComment.username}...`, "info", 0);
+    const result = await enqueueBlock(activeComment);
     if (result.ok) {
-      showBlockToast(`Blocked ${comment.username}.`);
+      showBlockToast(`Blocked ${activeComment.username}.`);
       return;
     }
 
     button.disabled = false;
     showBlockToast(
-      `Could not block ${comment.username}: ${result.error}`,
+      `Could not block ${activeComment.username}: ${result.error}`,
       "error",
       5000,
     );
   });
 
-  menuButton.parentElement.insertBefore(button, menuButton);
+  host.insertBefore(button, menuButton);
 }
 
 function upsertPanel() {
@@ -1440,8 +1427,7 @@ function openModerationModal() {
         }
 
         modal.hidden = false;
-        summary.textContent =
-          `Blocked ${succeeded.length} users. ${failed.length} failed.`;
+        summary.textContent = `Blocked ${succeeded.length} users. ${failed.length} failed.`;
         list.replaceChildren(
           ...failed.map((result) => {
             const row = document.createElement("div");
@@ -1534,9 +1520,11 @@ function renderComments() {
     document.getElementById(COMMENT_PANEL_ID)?.remove();
     document.getElementById(MODERATION_BUTTON_ID)?.remove();
     document.getElementById(MODERATION_MODAL_ID)?.remove();
+    clearHiddenSpamNodes();
     commentStore = new Map();
     foldedCommentStore = new Map();
-    markedSpamNodeStore = new Map();
+    hiddenSpamNodeStore = new Map();
+    hiddenSpamNodeOwners = new WeakMap();
     storedStatusId = "";
     stopAutoScan("");
     return;
@@ -1545,17 +1533,17 @@ function renderComments() {
   const activeStatusId = getStatusId();
 
   if (activeStatusId !== storedStatusId) {
+    clearHiddenSpamNodes();
     commentStore = new Map();
     foldedCommentStore = new Map();
-    markedSpamNodeStore = new Map();
+    hiddenSpamNodeStore = new Map();
+    hiddenSpamNodeOwners = new WeakMap();
     storedStatusId = activeStatusId;
     stopAutoScan("");
     document.getElementById(MODERATION_MODAL_ID)?.remove();
   }
 
-  processVisibleSpam();
-  for (const comment of collectVisibleComments()) {
-    commentStore.set(comment.id, comment);
+  for (const comment of processVisibleSpam()) {
     if (comment.isSpam) {
       foldedCommentStore.set(comment.id, comment);
     }
@@ -1625,19 +1613,45 @@ let renderTimer = 0;
 
 function scheduleRender() {
   window.clearTimeout(renderTimer);
-  renderTimer = window.setTimeout(renderComments, 250);
+  const scrollingDelay = performance.now() - lastScrollAt < 350 ? 700 : 250;
+  renderTimer = window.setTimeout(renderComments, scrollingDelay);
 }
 
 let currentUrl = window.location.href;
 
-const observer = new MutationObserver(() => {
+function isOwnNode(node) {
+  if (!(node instanceof Element)) {
+    return false;
+  }
+
+  return Boolean(
+    node.matches(OWN_ELEMENT_SELECTOR) || node.closest(OWN_ELEMENT_SELECTOR),
+  );
+}
+
+function isOwnMutation(mutation) {
+  const changedNodes = [...mutation.addedNodes, ...mutation.removedNodes];
+
+  return (
+    isOwnNode(mutation.target) ||
+    (changedNodes.length > 0 && changedNodes.every(isOwnNode))
+  );
+}
+
+const observer = new MutationObserver((mutations) => {
   if (currentUrl !== window.location.href) {
     currentUrl = window.location.href;
+    clearHiddenSpamNodes();
     commentStore = new Map();
     foldedCommentStore = new Map();
-    markedSpamNodeStore = new Map();
+    hiddenSpamNodeStore = new Map();
+    hiddenSpamNodeOwners = new WeakMap();
     storedStatusId = "";
     document.getElementById(MODERATION_MODAL_ID)?.remove();
+  }
+
+  if (mutations.every(isOwnMutation)) {
+    return;
   }
 
   scheduleRender();
@@ -1647,6 +1661,14 @@ observer.observe(document.documentElement, {
   childList: true,
   subtree: true,
 });
+
+window.addEventListener(
+  "scroll",
+  () => {
+    lastScrollAt = performance.now();
+  },
+  { passive: true },
+);
 
 async function loadCustomSpamKeywords() {
   const [syncStored, localStored] = await Promise.all([

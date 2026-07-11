@@ -21,13 +21,10 @@
   },
   "options_page": "options.html",
   "permissions": [
-    "tabs",
     "storage"
   ],
   "host_permissions": [
-    "<all_urls>",
-    "https://x.com/*",
-    "https://www.x.com/*"
+    "<all_urls>"
   ],
   "content_scripts": [
     {
