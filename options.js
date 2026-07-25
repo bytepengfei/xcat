@@ -2,6 +2,7 @@ const CUSTOM_KEYWORDS_STORAGE_KEY = "customSpamKeywords";
 const KEYWORD_SUBSCRIPTION_URLS_STORAGE_KEY = "keywordSubscriptionUrls";
 const SUBSCRIBED_KEYWORDS_STORAGE_KEY = "subscribedSpamKeywords";
 const SHOW_COMMENT_PANEL_STORAGE_KEY = "showCommentPanel";
+const BLOCK_HISTORY_STORAGE_KEY = "blockHistory";
 const form = document.getElementById("settings-form");
 const keywordsInput = document.getElementById("keywords");
 const subscriptionUrlsInput = document.getElementById("subscription-urls");
@@ -10,6 +11,10 @@ const syncSubscriptionsButton = document.getElementById("sync-subscriptions");
 const showCommentPanelInput = document.getElementById("show-comment-panel");
 const displayLanguageInput = document.getElementById("display-language");
 const clearButton = document.getElementById("clear-keywords");
+const exportBlockHistoryButton = document.getElementById(
+  "export-block-history",
+);
+const blockHistorySummary = document.getElementById("block-history-summary");
 const statusText = document.getElementById("status");
 
 function parseKeywords(value) {
@@ -88,6 +93,46 @@ async function loadSettings() {
     : "";
   showCommentPanelInput.checked =
     syncStored[SHOW_COMMENT_PANEL_STORAGE_KEY] !== false;
+}
+
+function getBlockHistory(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function renderBlockHistoryCount(history) {
+  blockHistorySummary.textContent = XCatI18n.t("blockHistoryCount", {
+    count: history.length,
+  });
+  exportBlockHistoryButton.disabled = history.length === 0;
+}
+
+async function loadBlockHistoryCount() {
+  const stored = await chrome.storage.local.get([BLOCK_HISTORY_STORAGE_KEY]);
+  renderBlockHistoryCount(getBlockHistory(stored[BLOCK_HISTORY_STORAGE_KEY]));
+}
+
+async function exportBlockHistory() {
+  const stored = await chrome.storage.local.get([BLOCK_HISTORY_STORAGE_KEY]);
+  const history = getBlockHistory(stored[BLOCK_HISTORY_STORAGE_KEY]);
+  renderBlockHistoryCount(history);
+
+  if (history.length === 0) {
+    statusText.textContent = XCatI18n.t("statusNoBlockHistory");
+    return;
+  }
+
+  const blob = new Blob([JSON.stringify(history, null, 2)], {
+    type: "application/json;charset=utf-8",
+  });
+  const downloadUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = downloadUrl;
+  link.download = `xcat-block-history-${new Date().toISOString().slice(0, 10)}.json`;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 0);
+  statusText.textContent = XCatI18n.t("statusExportedBlocks", {
+    count: history.length,
+  });
 }
 
 async function saveSettings() {
@@ -186,10 +231,22 @@ syncSubscriptionsButton.addEventListener("click", async () => {
   }
 });
 
+exportBlockHistoryButton.addEventListener("click", async () => {
+  exportBlockHistoryButton.disabled = true;
+  try {
+    await exportBlockHistory();
+  } catch {
+    statusText.textContent = XCatI18n.t("statusExportFailed");
+  } finally {
+    await loadBlockHistoryCount().catch(() => {});
+  }
+});
+
 displayLanguageInput.addEventListener("change", async () => {
   await XCatI18n.save(displayLanguageInput.value);
   XCatI18n.apply();
   displayLanguageInput.value = XCatI18n.getCurrentPreference();
+  await loadBlockHistoryCount();
   statusText.textContent = XCatI18n.t("statusLanguageSaved");
 });
 
@@ -197,8 +254,16 @@ async function initialize() {
   displayLanguageInput.value = await XCatI18n.load();
   XCatI18n.apply();
   displayLanguageInput.value = XCatI18n.getCurrentPreference();
-  await loadSettings();
+  await Promise.all([loadSettings(), loadBlockHistoryCount()]);
 }
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === "local" && changes[BLOCK_HISTORY_STORAGE_KEY]) {
+    renderBlockHistoryCount(
+      getBlockHistory(changes[BLOCK_HISTORY_STORAGE_KEY].newValue),
+    );
+  }
+});
 
 initialize().catch(() => {
   statusText.textContent = XCatI18n.t("statusLoadingFailed");

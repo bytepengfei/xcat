@@ -10,6 +10,7 @@ const STATUS_PAGE_PATTERN = /^\/[^/]+\/status\/\d+/;
 const CUSTOM_KEYWORDS_STORAGE_KEY = "customSpamKeywords";
 const SUBSCRIBED_KEYWORDS_STORAGE_KEY = "subscribedSpamKeywords";
 const SHOW_COMMENT_PANEL_STORAGE_KEY = "showCommentPanel";
+const BLOCK_HISTORY_STORAGE_KEY = "blockHistory";
 const OWN_ELEMENT_SELECTOR = [
   `#${COMMENT_PANEL_ID}`,
   `#${COMMENT_PANEL_STYLE_ID}`,
@@ -146,12 +147,20 @@ function ensureStyle() {
     }
 
     .cat-visit-x-hidden-spam-cell {
-      position: relative !important;
+      display: block !important;
+      box-sizing: border-box !important;
+      height: 48px !important;
+      block-size: 48px !important;
+      min-height: 48px !important;
+      max-height: 48px !important;
+      margin-block: 0 !important;
+      padding-block: 0 !important;
+      overflow: hidden !important;
+      box-shadow: inset 0 -1px rgba(113, 118, 123, 0.16);
     }
 
     .cat-visit-x-hidden-spam-cell > * {
-      visibility: hidden !important;
-      pointer-events: none !important;
+      display: none !important;
     }
 
     .cat-visit-x-hidden-spam-cell::after {
@@ -161,10 +170,10 @@ function ensureStyle() {
       display: grid;
       place-items: center;
       box-sizing: border-box;
-      padding: 16px 24px;
+      padding: 0 16px;
       color: rgb(113, 118, 123);
       content: "Spam reply hidden";
-      font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font: 400 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       text-align: center;
       pointer-events: none;
     }
@@ -284,8 +293,7 @@ function ensureStyle() {
       background: #202327;
     }
 
-    #${MODERATION_MODAL_ID} [data-action="prepare-block"],
-    #${MODERATION_MODAL_ID} [data-action="confirm-block"] {
+    #${MODERATION_MODAL_ID} [data-action="prepare-block"] {
       background: #f4212e;
     }
 
@@ -875,6 +883,23 @@ function cleanupBlockedUserComments(username) {
   upsertModerationButton();
 }
 
+async function recordBlockedUser(comment) {
+  const stored = await chrome.storage.local.get([BLOCK_HISTORY_STORAGE_KEY]);
+  const history = Array.isArray(stored[BLOCK_HISTORY_STORAGE_KEY])
+    ? stored[BLOCK_HISTORY_STORAGE_KEY]
+    : [];
+  history.push({
+    comment: comment.content || "",
+    nickname: comment.nickname || "",
+    username: comment.username || "",
+    blockedAt: new Date().toISOString(),
+    matchedKeyword: Array.isArray(comment.spamReasons)
+      ? comment.spamReasons.some((reason) => reason.startsWith("keyword:"))
+      : "",
+  });
+  await chrome.storage.local.set({ [BLOCK_HISTORY_STORAGE_KEY]: history });
+}
+
 async function blockUserThroughX(comment) {
   const username = comment.username;
   if (!username) {
@@ -918,6 +943,11 @@ async function blockUserThroughX(comment) {
     await waitForElement(() =>
       !document.documentElement.contains(confirmButton) ? document.body : null,
     );
+    try {
+      await recordBlockedUser(comment);
+    } catch (error) {
+      console.warn("[XCat] Could not record blocked user.", error);
+    }
     cleanupBlockedUserComments(username);
     closeOpenXMenus();
     return { username, ok: true };
@@ -1219,6 +1249,12 @@ function getModerationButtonBadgeText() {
   return foldedCommentStore.size > 99 ? "99+" : String(foldedCommentStore.size);
 }
 
+function removeModerationModal() {
+  const modal = document.getElementById(MODERATION_MODAL_ID);
+  modal?.closeModerationModal?.();
+  modal?.remove();
+}
+
 function renderModerationButtonContent(button) {
   const icon = document.createElement("span");
   const badge = document.createElement("span");
@@ -1284,13 +1320,24 @@ function upsertModerationButton() {
 function openModerationModal() {
   ensureStyle();
 
-  const existingModal = document.getElementById(MODERATION_MODAL_ID);
-  if (existingModal) {
-    existingModal.remove();
-  }
+  removeModerationModal();
 
   const modal = document.createElement("section");
   modal.id = MODERATION_MODAL_ID;
+
+  const closeModal = () => {
+    document.removeEventListener("keydown", handleModalKeydown, true);
+    modal.remove();
+  };
+  const handleModalKeydown = (event) => {
+    if (event.key === "Escape" && !modal.hidden) {
+      event.preventDefault();
+      event.stopPropagation();
+      closeModal();
+    }
+  };
+  modal.closeModerationModal = closeModal;
+  document.addEventListener("keydown", handleModalKeydown, true);
 
   const comments = Array.from(foldedCommentStore.values());
   modal.innerHTML = `
@@ -1347,16 +1394,16 @@ function openModerationModal() {
   );
 
   modal.querySelector('[data-action="close"]').addEventListener("click", () => {
-    modal.remove();
+    closeModal();
   });
   modal.addEventListener("click", (event) => {
     if (event.target === modal) {
-      modal.remove();
+      closeModal();
     }
   });
   modal
     .querySelector('[data-action="prepare-block"]')
-    .addEventListener("click", () => {
+    .addEventListener("click", async (event) => {
       const selectedIds = Array.from(
         modal.querySelectorAll('input[type="checkbox"]:checked'),
       ).map((input) => input.value);
@@ -1377,84 +1424,63 @@ function openModerationModal() {
         return;
       }
 
-      const status = document.createElement("span");
-      const actions = document.createElement("div");
-      const cancel = document.createElement("button");
-      const confirm = document.createElement("button");
-      status.dataset.role = "block-status";
-      status.textContent = `Block ${commentsToBlock.length} selected users on X?`;
-      actions.style.display = "flex";
-      actions.style.gap = "8px";
-      cancel.type = "button";
-      cancel.dataset.action = "cancel-block";
-      cancel.textContent = "Cancel";
-      confirm.type = "button";
-      confirm.dataset.action = "confirm-block";
-      confirm.textContent = `Block ${commentsToBlock.length}`;
-      actions.append(cancel, confirm);
-      footer.replaceChildren(status, actions);
+      event.currentTarget.disabled = true;
+      modal.hidden = true;
 
-      cancel.addEventListener("click", () => openModerationModal());
-      confirm.addEventListener("click", async () => {
-        confirm.disabled = true;
-        cancel.disabled = true;
-        modal.hidden = true;
-
-        const results = [];
-        for (let index = 0; index < commentsToBlock.length; index += 1) {
-          const comment = commentsToBlock[index];
-          if (index > 0) {
-            await waitForBlockBatchInterval();
-          }
-          showBlockToast(
-            `Blocking ${index + 1}/${commentsToBlock.length}: ${comment.username}…`,
-            "info",
-            0,
-          );
-          results.push(await enqueueBlock(comment));
+      const results = [];
+      for (let index = 0; index < commentsToBlock.length; index += 1) {
+        const comment = commentsToBlock[index];
+        if (index > 0) {
+          await waitForBlockBatchInterval();
         }
-
-        const succeeded = results.filter((result) => result.ok);
-        const failed = results.filter((result) => !result.ok);
-        if (foldedCommentStore.size === 0) {
-          modal.remove();
-          showBlockToast(
-            `Block complete: ${succeeded.length} succeeded, ${failed.length} failed.`,
-            failed.length ? "error" : "info",
-            5000,
-          );
-          return;
-        }
-
-        modal.hidden = false;
-        summary.textContent = `Blocked ${succeeded.length} users. ${failed.length} failed.`;
-        list.replaceChildren(
-          ...failed.map((result) => {
-            const row = document.createElement("div");
-            row.style.padding = "12px 18px";
-            row.style.borderBottom = "1px solid #2f3336";
-            row.textContent = `${result.username}: ${result.error}`;
-            return row;
-          }),
+        showBlockToast(
+          `Blocking ${index + 1}/${commentsToBlock.length}: ${comment.username}…`,
+          "info",
+          0,
         );
-        footer.replaceChildren();
-        const resultStatus = document.createElement("span");
-        const done = document.createElement("button");
-        resultStatus.dataset.role = "block-status";
-        resultStatus.textContent = failed.length
-          ? "Failed users were not blocked and can be retried."
-          : "All selected users were blocked.";
-        done.type = "button";
-        done.dataset.action = "close";
-        done.textContent = "Done";
-        done.addEventListener("click", () => modal.remove());
-        footer.append(resultStatus, done);
+        results.push(await enqueueBlock(comment));
+      }
+
+      const succeeded = results.filter((result) => result.ok);
+      const failed = results.filter((result) => !result.ok);
+      if (foldedCommentStore.size === 0) {
+        closeModal();
         showBlockToast(
           `Block complete: ${succeeded.length} succeeded, ${failed.length} failed.`,
           failed.length ? "error" : "info",
           5000,
         );
-      });
+        return;
+      }
+
+      modal.hidden = false;
+      summary.textContent = `Blocked ${succeeded.length} users. ${failed.length} failed.`;
+      list.replaceChildren(
+        ...failed.map((result) => {
+          const row = document.createElement("div");
+          row.style.padding = "12px 18px";
+          row.style.borderBottom = "1px solid #2f3336";
+          row.textContent = `${result.username}: ${result.error}`;
+          return row;
+        }),
+      );
+      footer.replaceChildren();
+      const resultStatus = document.createElement("span");
+      const done = document.createElement("button");
+      resultStatus.dataset.role = "block-status";
+      resultStatus.textContent = failed.length
+        ? "Failed users were not blocked and can be retried."
+        : "All selected users were blocked.";
+      done.type = "button";
+      done.dataset.action = "close";
+      done.textContent = "Done";
+      done.addEventListener("click", closeModal);
+      footer.append(resultStatus, done);
+      showBlockToast(
+        `Block complete: ${succeeded.length} succeeded, ${failed.length} failed.`,
+        failed.length ? "error" : "info",
+        5000,
+      );
     });
 
   document.documentElement.append(modal);
@@ -1519,7 +1545,7 @@ function renderComments() {
   if (!isStatusPage()) {
     document.getElementById(COMMENT_PANEL_ID)?.remove();
     document.getElementById(MODERATION_BUTTON_ID)?.remove();
-    document.getElementById(MODERATION_MODAL_ID)?.remove();
+    removeModerationModal();
     clearHiddenSpamNodes();
     commentStore = new Map();
     foldedCommentStore = new Map();
@@ -1540,7 +1566,7 @@ function renderComments() {
     hiddenSpamNodeOwners = new WeakMap();
     storedStatusId = activeStatusId;
     stopAutoScan("");
-    document.getElementById(MODERATION_MODAL_ID)?.remove();
+    removeModerationModal();
   }
 
   for (const comment of processVisibleSpam()) {
@@ -1647,7 +1673,7 @@ const observer = new MutationObserver((mutations) => {
     hiddenSpamNodeStore = new Map();
     hiddenSpamNodeOwners = new WeakMap();
     storedStatusId = "";
-    document.getElementById(MODERATION_MODAL_ID)?.remove();
+    removeModerationModal();
   }
 
   if (mutations.every(isOwnMutation)) {

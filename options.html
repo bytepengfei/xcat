@@ -56,6 +56,17 @@
         <textarea id="subscription-preview" rows="8" readonly spellcheck="false" placeholder="Synced subscription keywords appear here" data-i18n-placeholder="subscriptionPreviewPlaceholder"></textarea>
         <p class="hint" data-i18n="subscriptionPreviewHint">Preview content comes from the latest sync and is used together with custom keywords.</p>
 
+        <hr>
+
+        <div class="field-heading block-history-heading">
+          <span>
+            <strong data-i18n="blockHistoryLabel">Block history</strong>
+            <small id="block-history-summary"></small>
+          </span>
+          <button id="export-block-history" class="secondary" type="button" data-i18n="exportBlockHistory">Export JSON</button>
+        </div>
+        <p class="hint" data-i18n="blockHistoryHint">Successful blocks are saved with the reply, display name, username, time, and keyword-match status.</p>
+
         <div class="actions">
           <button type="submit" data-i18n="saveSettings">Save settings</button>
           <button id="clear-keywords" class="secondary" type="button" data-i18n="clearKeywords">Clear custom keywords</button>

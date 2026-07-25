@@ -147,6 +147,16 @@ textarea[readonly] {
   margin: 0;
 }
 
+.block-history-heading span {
+  display: grid;
+  gap: 5px;
+}
+
+.block-history-heading small {
+  color: #5f6368;
+  font-weight: 400;
+}
+
 .hint {
   margin: 8px 0 20px;
   font-size: 13px;

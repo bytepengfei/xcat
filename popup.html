@@ -21,6 +21,11 @@
       <p data-i18n="popupDescription">Open X and filter unwanted replies on post pages.</p>
       <button id="visit-x" type="button" data-i18n="visitX">Visit x.com</button>
       <button id="open-settings" class="secondary" type="button" data-i18n="openSettings">Keyword settings</button>
+      <form id="quick-add-form" class="quick-add">
+        <label class="sr-only" for="quick-keyword" data-i18n="quickKeywordLabel">Keyword</label>
+        <input id="quick-keyword" type="text" autocomplete="off" spellcheck="false" placeholder="Add a keyword" data-i18n-placeholder="quickKeywordPlaceholder">
+        <button id="quick-add-keyword" type="submit" data-i18n="quickAddKeyword">Add</button>
+      </form>
       <p id="status" class="status" role="status"></p>
     </main>
     <script src="i18n.js"></script>
