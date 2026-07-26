@@ -2,19 +2,19 @@
   <img src="icons/xcat-128.png" width="112" height="112" alt="XCat logo">
   <h1>XCat</h1>
   <p><strong>让 X / Twitter 的评论区重新值得阅读。</strong></p>
-  <p>关键词过滤 · 垃圾回复折叠 · 批量拉黑 · 评论采集</p>
+  <p>关键词过滤 · Home 快捷操作 · 批量拉黑 · 评论采集</p>
 
   [![Release](https://img.shields.io/github/v/release/bytepengfei/xcat?style=flat-square&color=f2a65a)](https://github.com/bytepengfei/xcat/releases/latest)
   [![Chrome MV3](https://img.shields.io/badge/Chrome-Manifest_V3-4285F4?style=flat-square&logo=googlechrome&logoColor=white)](manifest.json)
   [![Languages](https://img.shields.io/badge/UI-中文_%7C_English-111?style=flat-square)](#功能亮点)
 </div>
 
-XCat 是一个轻量、开源的 Chrome 扩展，用于过滤 X（Twitter）帖子下的垃圾评论、营销回复和不想看到的账号。它不会替你决定什么是垃圾内容：你可以维护自己的关键词，也可以订阅社区维护的关键词列表。
+XCat 是一个轻量、开源的 Chrome 扩展，用于过滤 X（Twitter）帖子下的垃圾评论、营销回复和不想看到的账号。它不会替你决定什么是垃圾内容：你可以维护自己的关键词，也可以订阅社区维护的关键词列表；在 Home 时间线中，还可以使用与 X 原生操作一致的 Mute / Block 快捷按钮。
 
-> XCat is an open-source Chrome extension for filtering spam replies on X/Twitter, reviewing matched accounts, blocking them in batches, and exporting loaded comments. The UI supports English and Chinese.
+> XCat is an open-source Chrome extension for filtering spam replies on X/Twitter, using native-style Mute / Block shortcuts on the Home timeline, reviewing matched accounts, and exporting moderation data. The UI supports English and Chinese.
 
 <p align="center">
-  <img src="docs/assets/xcat-popup.png" width="280" alt="XCat extension popup">
+  <img src="docs/assets/xcat-popup.png" width="330" alt="XCat extension popup with quick keyword entry and Settings shortcut">
 </p>
 
 ## 为什么是 XCat？
@@ -24,6 +24,7 @@ XCat 是一个轻量、开源的 Chrome 扩展，用于过滤 X（Twitter）帖�
 - **拉黑前可以复核**：集中查看命中的回复，勾选后调用 X 原生操作逐个拉黑；也可在回复旁一键快速拉黑。
 - **Home 快捷操作**：可在 Home 时间线帖子右上角直接 Mute 或 Block，并在设置页分别关闭。
 - **Block 记录可导出**：成功拉黑后在本地记录正文、昵称、用户名、时间和关键词命中状态，并可从设置页导出 JSON。
+- **弹窗快捷添加**：直接在扩展弹窗输入关键词，点击 `+` 或按 Enter 即可加入自定义过滤列表。
 - **顺手采集评论**：在帖子详情页自动滚动并收集 X 已加载的评论，一键复制结构化 JSON。
 - **本地优先**：设置通过 Chrome Sync/Local Storage 保存；扩展没有自建服务器，也不会把评论或账号数据上传给 XCat。
 
@@ -36,12 +37,13 @@ XCat 是一个轻量、开源的 Chrome 扩展，用于过滤 X（Twitter）帖�
 | 🐾 垃圾回复面板 | 通过搜索框旁的猫咪按钮查看命中数量、用户和原因 |
 | 🚫 批量 / 快速拉黑 | 复核后批量拉黑，或直接在单条回复旁快速操作 |
 | 🔇 Home 快捷操作 | 使用 X 原生图标快速 Mute / Block，可分别开关 |
+| ⚡ 弹窗快捷添加 | 在 Popup 中输入关键词，点击 `+` 或按 Enter 保存 |
 | 📤 Block 记录 | 在设置页查看记录数量并导出本地保存的 JSON |
 | 📥 评论采集 | 自动滚动加载评论，并复制包含账号与认证信息的 JSON |
 | 🌏 双语界面 | 自动跟随 Chrome 语言，也可手动选择中文或 English |
 
 <p align="center">
-  <img src="docs/assets/xcat-settings.png" width="760" alt="XCat keyword settings with custom and subscribed filters">
+  <img src="docs/assets/xcat-settings.png" width="760" alt="XCat Settings with General controls, Home timeline shortcuts, keyword filters, and Block history">
 </p>
 
 ## 安装
@@ -63,13 +65,13 @@ git clone https://github.com/bytepengfei/xcat.git
 
 ## 快速上手
 
-1. 点击 XCat 图标，打开 **关键词设置**。
-2. 每行输入一个关键词，例如账号名、推广话术或常见诈骗文案，然后保存。
-3. 如需共享规则，填入纯文本关键词列表 URL 并点击 **同步**。
-4. 打开任意 X 帖子详情页。命中的回复会被折叠，右侧猫咪按钮会显示数量。
-5. 在垃圾回复列表中复核并批量拉黑，或点击回复菜单旁的划线图标快速拉黑。
+1. 点击 XCat 图标，可直接在 Popup 中添加一个关键词；点击右上角齿轮进入 **Settings**。
+2. 在 **Custom keywords** 中每行输入一个关键词，然后点击 **Save**。General 中的语言、调试面板和 Home 快捷按钮设置会实时生效。
+3. 如需共享规则，在 **Keyword subscriptions** 中填入纯文本关键词列表 URL 并点击 **Sync**。
+4. 打开 Home 时间线，可通过帖子右上角的 X 原生风格按钮快速 Mute / Block；两个按钮都可以在 Settings 中单独关闭。
+5. 打开任意 X 帖子详情页。命中的回复会被折叠，右侧猫咪按钮会显示数量，可在列表中复核并批量拉黑。
 
-评论采集面板可在设置中关闭；关闭后，垃圾回复过滤和拉黑功能仍会正常工作。
+右侧评论调试面板可在 Settings 中关闭；关闭后，垃圾回复过滤、快捷操作和拉黑功能仍会正常工作。
 
 ## 评论 JSON
 
