@@ -8,70 +8,116 @@
   </head>
   <body>
     <main>
-      <header>
+      <header class="hero">
         <p class="eyebrow">XCAT</p>
-        <h1 data-i18n="settingsHeading">Keyword settings</h1>
-        <p class="description" data-i18n="settingsDescription">Replies are muted when the comment, display name, or username contains any keyword.</p>
+        <h1 data-i18n="settingsHeading">Settings</h1>
+        <p class="description" data-i18n="settingsDescription">Configure filtering, Home timeline shortcuts, and moderation data.</p>
       </header>
 
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+
       <form id="settings-form">
-        <label class="language-row" for="display-language">
-          <span>
-            <strong data-i18n="displayLanguageLabel">Display language</strong>
-            <small data-i18n="displayLanguageHint">Auto follows Chrome's display language and falls back to English.</small>
-          </span>
-          <select id="display-language">
-            <option value="auto" data-i18n="languageAuto">Auto</option>
-            <option value="en" data-i18n="languageEnglish">English</option>
-            <option value="zh" data-i18n="languageChinese">Chinese</option>
-          </select>
-        </label>
+        <section class="settings-card" aria-labelledby="general-settings-heading">
+          <div class="section-heading">
+            <h2 id="general-settings-heading" data-i18n="generalSettingsLabel">General</h2>
+            <p data-i18n="generalSettingsHint">Choose how XCat appears and which controls are visible.</p>
+          </div>
 
-        <hr>
+          <div class="setting-list">
+            <label class="setting-row" for="display-language">
+              <span class="setting-copy">
+                <strong data-i18n="displayLanguageLabel">Display language</strong>
+                <small data-i18n="displayLanguageHint">Auto follows Chrome's display language and falls back to English.</small>
+              </span>
+              <span class="select-control">
+                <select id="display-language">
+                  <option value="auto" data-i18n="languageAuto">Auto</option>
+                  <option value="en" data-i18n="languageEnglish">English</option>
+                  <option value="zh" data-i18n="languageChinese">Chinese</option>
+                </select>
+              </span>
+            </label>
 
-        <label class="toggle-row" for="show-comment-panel">
-          <span>
-            <strong data-i18n="commentPanelLabel">Show right-side comments panel</strong>
-            <small data-i18n="commentPanelHint">Filtering still runs when the panel is hidden.</small>
-          </span>
-          <input id="show-comment-panel" type="checkbox">
-        </label>
+            <label class="setting-row" for="show-comment-panel">
+              <span class="setting-copy">
+                <strong data-i18n="commentPanelLabel">Show right-side comments debug panel</strong>
+                <small data-i18n="commentPanelHint">Filtering still runs when the panel is hidden.</small>
+              </span>
+              <input id="show-comment-panel" class="switch" type="checkbox">
+            </label>
 
-        <hr>
+            <div class="timeline-settings">
+              <div class="setting-copy timeline-heading">
+                <strong data-i18n="homeQuickActionsLabel">Home timeline shortcuts</strong>
+                <small data-i18n="homeQuickActionsHint">Show X-native shortcuts in the upper-right corner of posts on the Home timeline.</small>
+              </div>
 
-        <label for="keywords" data-i18n="customKeywordsLabel">Custom keywords</label>
-        <textarea id="keywords" rows="12" spellcheck="false" placeholder="Enter one keyword per line" data-i18n-placeholder="customKeywordsPlaceholder"></textarea>
-        <p class="hint" data-i18n="customKeywordsHint">One keyword per line, case-insensitive. No replies are marked when no keywords are configured.</p>
+              <div class="shortcut-options">
+                <label class="shortcut-option" for="show-home-quick-mute">
+                  <span class="setting-copy">
+                    <strong data-i18n="homeQuickMuteLabel">Show quick Mute</strong>
+                    <small data-i18n="homeQuickMuteHint">Mute an account through X's native post menu.</small>
+                  </span>
+                  <input id="show-home-quick-mute" class="switch" type="checkbox">
+                </label>
 
-        <hr>
+                <label class="shortcut-option" for="show-home-quick-block">
+                  <span class="setting-copy">
+                    <strong data-i18n="homeQuickBlockLabel">Show quick Block</strong>
+                    <small data-i18n="homeQuickBlockHint">Block an account through X's native post menu.</small>
+                  </span>
+                  <input id="show-home-quick-block" class="switch" type="checkbox">
+                </label>
+              </div>
+            </div>
+          </div>
+        </section>
 
-        <div class="field-heading">
-          <label for="subscription-urls" data-i18n="subscriptionLabel">Keyword subscriptions</label>
-          <button id="sync-subscriptions" class="secondary" type="button" data-i18n="syncSubscriptions">Sync</button>
-        </div>
-        <textarea id="subscription-urls" rows="5" spellcheck="false" placeholder="Enter one subscription URL per line" data-i18n-placeholder="subscriptionUrlsPlaceholder"></textarea>
-        <p class="hint" data-i18n="subscriptionUrlsHint">Subscription content is parsed line by line. Blank lines and lines starting with # are ignored.</p>
+        <section class="settings-card" aria-labelledby="custom-keywords-heading">
+          <div class="section-heading section-heading-action">
+            <div>
+              <h2 id="custom-keywords-heading" data-i18n="customKeywordsLabel">Custom keywords</h2>
+              <p data-i18n="customKeywordsHint">One keyword per line, case-insensitive. No replies are marked when no keywords are configured.</p>
+            </div>
+            <button id="save-keywords" class="secondary compact" type="button" data-i18n="saveKeywords">Save</button>
+          </div>
+          <label class="sr-only" for="keywords" data-i18n="customKeywordsLabel">Custom keywords</label>
+          <textarea id="keywords" rows="10" spellcheck="false" placeholder="Enter one keyword per line" data-i18n-placeholder="customKeywordsPlaceholder"></textarea>
+        </section>
 
-        <label for="subscription-preview" data-i18n="subscriptionPreviewLabel">Subscription keyword preview</label>
-        <textarea id="subscription-preview" rows="8" readonly spellcheck="false" placeholder="Synced subscription keywords appear here" data-i18n-placeholder="subscriptionPreviewPlaceholder"></textarea>
-        <p class="hint" data-i18n="subscriptionPreviewHint">Preview content comes from the latest sync and is used together with custom keywords.</p>
+        <section class="settings-card" aria-labelledby="subscriptions-heading">
+          <div class="section-heading section-heading-action">
+            <div>
+              <h2 id="subscriptions-heading" data-i18n="subscriptionLabel">Keyword subscriptions</h2>
+              <p data-i18n="subscriptionUrlsHint">Subscription content is parsed line by line. Blank lines and lines starting with # are ignored.</p>
+            </div>
+            <button id="sync-subscriptions" class="secondary compact" type="button" data-i18n="syncSubscriptions">Sync</button>
+          </div>
 
-        <hr>
+          <label class="sr-only" for="subscription-urls" data-i18n="subscriptionLabel">Keyword subscriptions</label>
+          <textarea id="subscription-urls" rows="4" spellcheck="false" placeholder="Enter one subscription URL per line" data-i18n-placeholder="subscriptionUrlsPlaceholder"></textarea>
 
-        <div class="field-heading block-history-heading">
-          <span>
-            <strong data-i18n="blockHistoryLabel">Block history</strong>
-            <small id="block-history-summary"></small>
-          </span>
-          <button id="export-block-history" class="secondary" type="button" data-i18n="exportBlockHistory">Export JSON</button>
-        </div>
-        <p class="hint" data-i18n="blockHistoryHint">Successful blocks are saved with the reply, display name, username, time, and keyword-match status.</p>
+          <div class="subsection">
+            <div class="field-heading">
+              <label for="subscription-preview" data-i18n="subscriptionPreviewLabel">Subscription keyword preview</label>
+              <span class="readonly-badge" data-i18n="readOnlyLabel">Read only</span>
+            </div>
+            <p class="field-hint" data-i18n="subscriptionPreviewHint">Preview content comes from the latest sync and is used together with custom keywords.</p>
+            <textarea id="subscription-preview" rows="6" readonly spellcheck="false" placeholder="Synced subscription keywords appear here" data-i18n-placeholder="subscriptionPreviewPlaceholder"></textarea>
+          </div>
+        </section>
 
-        <div class="actions">
-          <button type="submit" data-i18n="saveSettings">Save settings</button>
-          <button id="clear-keywords" class="secondary" type="button" data-i18n="clearKeywords">Clear custom keywords</button>
-        </div>
-        <p id="status" class="status" role="status" aria-live="polite"></p>
+        <section class="settings-card data-card" aria-labelledby="block-history-heading">
+          <div class="section-heading section-heading-action">
+            <div>
+              <h2 id="block-history-heading" data-i18n="blockHistoryLabel">Block history</h2>
+              <p data-i18n="blockHistoryHint">Successful blocks are saved with the reply, display name, username, time, and keyword-match status.</p>
+              <span id="block-history-summary" class="data-summary"></span>
+            </div>
+            <button id="export-block-history" class="secondary compact" type="button" data-i18n="exportBlockHistory">Export JSON</button>
+          </div>
+        </section>
+
       </form>
     </main>
     <script src="i18n.js"></script>

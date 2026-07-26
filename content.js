@@ -3,13 +3,19 @@ const COMMENT_PANEL_STYLE_ID = "cat-visit-x-comments-style";
 const MODERATION_BUTTON_ID = "cat-visit-x-moderation-button";
 const MODERATION_MODAL_ID = "cat-visit-x-moderation-modal";
 const BLOCK_TOAST_ID = "cat-visit-x-block-toast";
+const QUICK_ACTION_BUTTON_CLASS = "cat-visit-x-quick-action";
 const QUICK_BLOCK_BUTTON_CLASS = "cat-visit-x-quick-block";
+const QUICK_MUTE_BUTTON_CLASS = "cat-visit-x-quick-mute";
+const HOME_QUICK_ACTION_CLASS = "cat-visit-x-home-quick-action";
 const QUICK_BLOCK_HOST_CLASS = "cat-visit-x-quick-block-host";
 const STYLE_ID = "cat-visit-x-style";
 const STATUS_PAGE_PATTERN = /^\/[^/]+\/status\/\d+/;
+const HOME_PAGE_PATTERN = /^\/home\/?$/;
 const CUSTOM_KEYWORDS_STORAGE_KEY = "customSpamKeywords";
 const SUBSCRIBED_KEYWORDS_STORAGE_KEY = "subscribedSpamKeywords";
 const SHOW_COMMENT_PANEL_STORAGE_KEY = "showCommentPanel";
+const SHOW_HOME_QUICK_MUTE_STORAGE_KEY = "showHomeQuickMute";
+const SHOW_HOME_QUICK_BLOCK_STORAGE_KEY = "showHomeQuickBlock";
 const BLOCK_HISTORY_STORAGE_KEY = "blockHistory";
 const OWN_ELEMENT_SELECTOR = [
   `#${COMMENT_PANEL_ID}`,
@@ -18,11 +24,13 @@ const OWN_ELEMENT_SELECTOR = [
   `#${MODERATION_MODAL_ID}`,
   `#${BLOCK_TOAST_ID}`,
   `#${STYLE_ID}`,
-  `.${QUICK_BLOCK_BUTTON_CLASS}`,
+  `.${QUICK_ACTION_BUTTON_CLASS}`,
 ].join(",");
 let customSpamKeywords = [];
 let subscribedSpamKeywords = [];
 let showCommentPanel = true;
+let showHomeQuickMute = true;
+let showHomeQuickBlock = true;
 let commentStore = new Map();
 let foldedCommentStore = new Map();
 let hiddenSpamNodeStore = new Map();
@@ -32,11 +40,17 @@ let autoScanTimer = 0;
 let autoScanLastCount = 0;
 let autoScanIdleRounds = 0;
 let blockExecutionChain = Promise.resolve();
+let muteExecutionChain = Promise.resolve();
 let lastScrollAt = 0;
 const blockingUsernames = new Set();
+const mutingUsernames = new Set();
 
 function isStatusPage() {
   return STATUS_PAGE_PATTERN.test(window.location.pathname);
+}
+
+function isHomePage() {
+  return HOME_PAGE_PATTERN.test(window.location.pathname);
 }
 
 function getStatusId() {
@@ -302,7 +316,7 @@ function ensureStyle() {
       cursor: default;
     }
 
-    .${QUICK_BLOCK_BUTTON_CLASS} {
+    .${QUICK_ACTION_BUTTON_CLASS} {
       position: absolute;
       top: 50%;
       right: calc(100% + 28px);
@@ -327,22 +341,69 @@ function ensureStyle() {
       background: rgba(244, 33, 46, 0.1);
     }
 
-    .${QUICK_BLOCK_BUTTON_CLASS}:focus-visible {
+    .${QUICK_MUTE_BUTTON_CLASS}:hover {
+      color: rgb(29, 155, 240);
+      background: rgba(29, 155, 240, 0.1);
+    }
+
+    .${QUICK_ACTION_BUTTON_CLASS}:focus-visible {
       outline: 2px solid #1d9bf0;
       outline-offset: 1px;
     }
 
-    .${QUICK_BLOCK_BUTTON_CLASS}:disabled {
+    .${QUICK_ACTION_BUTTON_CLASS}:disabled {
       cursor: wait;
       opacity: 0.55;
     }
 
-    .${QUICK_BLOCK_BUTTON_CLASS} .x-block-icon {
+    .${QUICK_ACTION_BUTTON_CLASS} .x-action-icon {
       display: block;
       box-sizing: border-box;
       width: 20px;
       height: 20px;
       fill: currentColor;
+    }
+
+    .${HOME_QUICK_ACTION_CLASS} {
+      position: relative;
+      top: auto;
+      right: auto;
+      flex: 0 0 20px;
+      width: 20px;
+      height: 20px;
+      margin: 0;
+      transform: none;
+    }
+
+    .${HOME_QUICK_ACTION_CLASS}:hover {
+      background: transparent;
+    }
+
+    .${HOME_QUICK_ACTION_CLASS}::before {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      z-index: 0;
+      width: 34.75px;
+      height: 34.75px;
+      border-radius: 9999px;
+      background: transparent;
+      content: "";
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+    }
+
+    .${HOME_QUICK_ACTION_CLASS}.${QUICK_MUTE_BUTTON_CLASS}:hover::before {
+      background: rgba(29, 155, 240, 0.1);
+    }
+
+    .${HOME_QUICK_ACTION_CLASS}.${QUICK_BLOCK_BUTTON_CLASS}:hover::before {
+      background: rgba(244, 33, 46, 0.1);
+    }
+
+    .${HOME_QUICK_ACTION_CLASS} .x-action-icon {
+      position: relative;
+      z-index: 1;
     }
 
     .${QUICK_BLOCK_HOST_CLASS} {
@@ -588,7 +649,7 @@ function isUsableMenuCandidate(element) {
     return false;
   }
 
-  if (element.closest(`.${QUICK_BLOCK_BUTTON_CLASS}`)) {
+  if (element.closest(`.${QUICK_ACTION_BUTTON_CLASS}`)) {
     return false;
   }
 
@@ -688,7 +749,10 @@ function clearHiddenSpamNode(node) {
   }
 
   const previousCommentId = hiddenSpamNodeOwners.get(node);
-  if (previousCommentId && hiddenSpamNodeStore.get(previousCommentId) === node) {
+  if (
+    previousCommentId &&
+    hiddenSpamNodeStore.get(previousCommentId) === node
+  ) {
     hiddenSpamNodeStore.delete(previousCommentId);
   }
 
@@ -995,7 +1059,7 @@ function createQuickBlockIcon() {
   const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
   const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  icon.classList.add("x-block-icon");
+  icon.classList.add("x-action-icon");
   icon.setAttribute("viewBox", "0 0 24 24");
   icon.setAttribute("aria-hidden", "true");
   path.setAttribute(
@@ -1007,20 +1071,90 @@ function createQuickBlockIcon() {
   return icon;
 }
 
-function upsertQuickBlockButton(article, comment) {
-  const currentUsername = normalizeText(
+function createQuickMuteIcon() {
+  const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  const path1 = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  const path2 = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  icon.classList.add("x-action-icon");
+  icon.setAttribute("viewBox", "0 0 24 24");
+  icon.setAttribute("aria-hidden", "true");
+  path1.setAttribute(
+    "d",
+    "M16 22h-2.35l-.275-.219-3.842-3.073 1.424-1.424L14 19.72v-5.477l2-2V22z",
+  );
+  path2.setAttribute(
+    "d",
+    "M16 6.586l4.293-4.293 1.414 1.414-18 18-1.414-1.414 2.657-2.658C3.795 17.063 3 15.875 3 14.5v-5C3 7.567 4.567 6 6.5 6h2.148l4.727-3.781.274-.219H16v4.586zM9.625 7.78L9.351 8H6.5C5.672 8 5 8.672 5 9.5v5c0 .828.672 1.5 1.5 1.5h.086L14 8.586V4.28l-4.375 3.5z",
+  );
+  path2.setAttribute("clip-rule", "evenodd");
+  path2.setAttribute("fill-rule", "evenodd");
+  icon.append(path1);
+  icon.append(path2);
+  return icon;
+}
+
+function getCurrentUsername() {
+  return normalizeText(
     document.querySelector('[data-testid="SideNav_AccountSwitcher_Button"]')
       ?.innerText || "",
   )
     .split(" ")
     .find((text) => /^@[A-Za-z0-9_]+$/.test(text));
-  const existingButton = article.querySelector(
-    `.${QUICK_BLOCK_BUTTON_CLASS}`,
-  );
-  if (
+}
+
+function isOwnComment(comment) {
+  const currentUsername = getCurrentUsername();
+  return (
     !comment.username ||
     comment.username.toLowerCase() === currentUsername?.toLowerCase()
+  );
+}
+
+function getHomeQuickActionTarget(article, menuButton) {
+  const grokButton = article.querySelector(
+    'button[aria-label="Grok actions"]',
+  );
+
+  if (!grokButton) {
+    return { host: menuButton.parentElement, reference: menuButton };
+  }
+
+  const grokAncestors = new Set();
+  for (
+    let node = grokButton;
+    node && node !== article;
+    node = node.parentElement
   ) {
+    grokAncestors.add(node);
+  }
+
+  let actionGroup = menuButton;
+  while (
+    actionGroup &&
+    actionGroup !== article &&
+    !grokAncestors.has(actionGroup)
+  ) {
+    actionGroup = actionGroup.parentElement;
+  }
+
+  if (!actionGroup || actionGroup === article) {
+    return { host: menuButton.parentElement, reference: menuButton };
+  }
+
+  let grokBranch = grokButton;
+  while (grokBranch.parentElement !== actionGroup) {
+    grokBranch = grokBranch.parentElement;
+  }
+
+  return {
+    host: actionGroup,
+    reference: grokBranch,
+  };
+}
+
+function upsertQuickBlockButton(article, comment, { home = false } = {}) {
+  const existingButton = article.querySelector(`.${QUICK_BLOCK_BUTTON_CLASS}`);
+  if (isOwnComment(comment)) {
     existingButton?.remove();
     return;
   }
@@ -1030,23 +1164,35 @@ function upsertQuickBlockButton(article, comment) {
     return;
   }
 
-  const host = menuButton.parentElement;
-  host.classList.add(QUICK_BLOCK_HOST_CLASS);
+  const target = home
+    ? getHomeQuickActionTarget(article, menuButton)
+    : { host: menuButton.parentElement, reference: menuButton };
+  const { host, reference } = target;
+  if (!home) {
+    host.classList.add(QUICK_BLOCK_HOST_CLASS);
+  }
 
   if (existingButton) {
+    existingButton.classList.toggle(HOME_QUICK_ACTION_CLASS, home);
     existingButton.dataset.commentId = comment.id;
     existingButton.setAttribute("aria-label", `Block ${comment.username}`);
     existingButton.title = `Block ${comment.username}`;
     existingButton.disabled = false;
     if (existingButton.parentElement !== host) {
-      host.insertBefore(existingButton, menuButton);
+      host.insertBefore(existingButton, reference);
     }
     return;
   }
 
   const button = document.createElement("button");
   button.type = "button";
-  button.className = QUICK_BLOCK_BUTTON_CLASS;
+  button.className = [
+    QUICK_ACTION_BUTTON_CLASS,
+    QUICK_BLOCK_BUTTON_CLASS,
+    home ? HOME_QUICK_ACTION_CLASS : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
   button.dataset.commentId = comment.id;
   button.setAttribute("aria-label", `Block ${comment.username}`);
   button.title = `Block ${comment.username}`;
@@ -1084,7 +1230,195 @@ function upsertQuickBlockButton(article, comment) {
     );
   });
 
-  host.insertBefore(button, menuButton);
+  host.insertBefore(button, reference);
+}
+
+async function muteUserThroughX(comment) {
+  const username = comment.username;
+  if (!username) {
+    throw new Error("This post has no username.");
+  }
+
+  const article = getArticleForComment(comment);
+  if (!article) {
+    throw new Error("The post is no longer loaded.");
+  }
+
+  if (!isElementInViewport(article)) {
+    article.scrollIntoView({ block: "center", behavior: "auto" });
+  }
+
+  try {
+    closeOpenXMenus();
+    const menuButton = article.querySelector('[data-testid="caret"]');
+    if (!menuButton) {
+      throw new Error("X More menu was not found.");
+    }
+
+    activateElement(menuButton);
+    const escapedUsername = escapeRegExp(username);
+    const mutePattern = new RegExp(
+      `^(mute|静音|ミュート)\\s+${escapedUsername}(\\b|$)`,
+      "i",
+    );
+    const muteItem = await waitForElement(() =>
+      findMenuItem(mutePattern, "mute"),
+    );
+    activateElement(muteItem);
+    await waitForElement(() =>
+      !document.documentElement.contains(muteItem) ? document.body : null,
+    );
+    cleanupBlockedUserComments(username);
+    closeOpenXMenus();
+    return { username, ok: true };
+  } catch (error) {
+    closeOpenXMenus();
+    throw error;
+  }
+}
+
+function enqueueMute(comment) {
+  const username = comment.username.toLowerCase();
+  if (mutingUsernames.has(username)) {
+    return Promise.resolve({
+      username: comment.username,
+      ok: false,
+      error: "Already being muted.",
+    });
+  }
+
+  mutingUsernames.add(username);
+  const operation = muteExecutionChain.then(async () => {
+    try {
+      return await muteUserThroughX(comment);
+    } catch (error) {
+      return {
+        username: comment.username,
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    } finally {
+      mutingUsernames.delete(username);
+    }
+  });
+  muteExecutionChain = operation.then(
+    () => undefined,
+    () => undefined,
+  );
+  return operation;
+}
+
+function upsertQuickMuteButton(article, comment) {
+  const existingButton = article.querySelector(`.${QUICK_MUTE_BUTTON_CLASS}`);
+  if (isOwnComment(comment)) {
+    existingButton?.remove();
+    return;
+  }
+
+  const menuButton = article.querySelector('[data-testid="caret"]');
+  if (!menuButton?.parentElement) {
+    return;
+  }
+
+  const { host, reference } = getHomeQuickActionTarget(article, menuButton);
+
+  if (existingButton) {
+    existingButton.dataset.commentId = comment.id;
+    existingButton.setAttribute("aria-label", `Mute ${comment.username}`);
+    existingButton.title = `Mute ${comment.username}`;
+    existingButton.disabled = false;
+    if (existingButton.parentElement !== host) {
+      host.insertBefore(existingButton, reference);
+    }
+    return;
+  }
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = [
+    QUICK_ACTION_BUTTON_CLASS,
+    QUICK_MUTE_BUTTON_CLASS,
+    HOME_QUICK_ACTION_CLASS,
+  ].join(" ");
+  button.dataset.commentId = comment.id;
+  button.setAttribute("aria-label", `Mute ${comment.username}`);
+  button.title = `Mute ${comment.username}`;
+  button.append(createQuickMuteIcon());
+  button.addEventListener("mousedown", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+  button.addEventListener("click", async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (button.disabled) {
+      return;
+    }
+
+    const activeComment = commentStore.get(button.dataset.commentId || "");
+    if (!activeComment) {
+      showBlockToast("This post is no longer loaded.", "error", 5000);
+      return;
+    }
+
+    button.disabled = true;
+    showBlockToast(`Muting ${activeComment.username}...`, "info", 0);
+    const result = await enqueueMute(activeComment);
+    if (result.ok) {
+      showBlockToast(`Muted ${activeComment.username}.`);
+      return;
+    }
+
+    button.disabled = false;
+    showBlockToast(
+      `Could not mute ${activeComment.username}: ${result.error}`,
+      "error",
+      5000,
+    );
+  });
+
+  host.insertBefore(button, reference);
+}
+
+function removeHomeQuickActions() {
+  document
+    .querySelectorAll(`.${HOME_QUICK_ACTION_CLASS}`)
+    .forEach((button) => button.remove());
+}
+
+function processHomeQuickActions() {
+  if (!isHomePage()) {
+    removeHomeQuickActions();
+    return;
+  }
+
+  ensureStyle();
+  commentStore = new Map();
+  const articles = Array.from(
+    (document.querySelector("main") || document).querySelectorAll(
+      'article[data-testid="tweet"]',
+    ),
+  );
+
+  for (const article of articles) {
+    const comment = buildCommentFromArticle(article);
+    if (!comment.username) {
+      continue;
+    }
+    commentStore.set(comment.id, comment);
+
+    if (showHomeQuickMute) {
+      upsertQuickMuteButton(article, comment);
+    } else {
+      article.querySelector(`.${QUICK_MUTE_BUTTON_CLASS}`)?.remove();
+    }
+
+    if (showHomeQuickBlock) {
+      upsertQuickBlockButton(article, comment, { home: true });
+    } else {
+      article.querySelector(`.${QUICK_BLOCK_BUTTON_CLASS}`)?.remove();
+    }
+  }
 }
 
 function upsertPanel() {
@@ -1553,9 +1887,11 @@ function renderComments() {
     hiddenSpamNodeOwners = new WeakMap();
     storedStatusId = "";
     stopAutoScan("");
+    processHomeQuickActions();
     return;
   }
 
+  removeHomeQuickActions();
   const activeStatusId = getStatusId();
 
   if (activeStatusId !== storedStatusId) {
@@ -1701,6 +2037,8 @@ async function loadCustomSpamKeywords() {
     chrome.storage.sync.get([
       CUSTOM_KEYWORDS_STORAGE_KEY,
       SHOW_COMMENT_PANEL_STORAGE_KEY,
+      SHOW_HOME_QUICK_MUTE_STORAGE_KEY,
+      SHOW_HOME_QUICK_BLOCK_STORAGE_KEY,
     ]),
     chrome.storage.local.get([SUBSCRIBED_KEYWORDS_STORAGE_KEY]),
   ]);
@@ -1713,6 +2051,8 @@ async function loadCustomSpamKeywords() {
     ? localStored[SUBSCRIBED_KEYWORDS_STORAGE_KEY]
     : [];
   showCommentPanel = syncStored[SHOW_COMMENT_PANEL_STORAGE_KEY] !== false;
+  showHomeQuickMute = syncStored[SHOW_HOME_QUICK_MUTE_STORAGE_KEY] !== false;
+  showHomeQuickBlock = syncStored[SHOW_HOME_QUICK_BLOCK_STORAGE_KEY] !== false;
 }
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
@@ -1724,6 +2064,14 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     if (changes[SHOW_COMMENT_PANEL_STORAGE_KEY]) {
       showCommentPanel =
         changes[SHOW_COMMENT_PANEL_STORAGE_KEY].newValue !== false;
+    }
+    if (changes[SHOW_HOME_QUICK_MUTE_STORAGE_KEY]) {
+      showHomeQuickMute =
+        changes[SHOW_HOME_QUICK_MUTE_STORAGE_KEY].newValue !== false;
+    }
+    if (changes[SHOW_HOME_QUICK_BLOCK_STORAGE_KEY]) {
+      showHomeQuickBlock =
+        changes[SHOW_HOME_QUICK_BLOCK_STORAGE_KEY].newValue !== false;
     }
     scheduleRender();
     return;

@@ -1,5 +1,4 @@
 const CUSTOM_KEYWORDS_STORAGE_KEY = "customSpamKeywords";
-const visitButton = document.getElementById("visit-x");
 const settingsButton = document.getElementById("open-settings");
 const quickAddForm = document.getElementById("quick-add-form");
 const quickKeywordInput = document.getElementById("quick-keyword");
@@ -34,17 +33,6 @@ async function addKeyword(keyword) {
   statusText.textContent = XCatI18n.t("quickKeywordAdded", { keyword });
 }
 
-visitButton.addEventListener("click", async () => {
-  statusText.textContent = XCatI18n.t("openingX");
-
-  try {
-    await chrome.tabs.create({ url: "https://x.com/" });
-    statusText.textContent = XCatI18n.t("openedX");
-  } catch (error) {
-    statusText.textContent = XCatI18n.t("openXFailed");
-  }
-});
-
 settingsButton.addEventListener("click", () => {
   chrome.runtime.openOptionsPage();
 });
@@ -69,6 +57,19 @@ quickAddForm.addEventListener("submit", async (event) => {
   } finally {
     quickAddButton.disabled = false;
   }
+});
+
+quickKeywordInput.addEventListener("keydown", (event) => {
+  if (
+    event.key !== "Enter" ||
+    event.isComposing ||
+    quickAddButton.disabled
+  ) {
+    return;
+  }
+
+  event.preventDefault();
+  quickAddForm.requestSubmit();
 });
 
 XCatI18n.load().then(() => {

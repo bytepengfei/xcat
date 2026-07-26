@@ -6,17 +6,27 @@
   const messages = {
     en: {
       optionsTitle: "XCat settings",
-      settingsHeading: "Keyword settings",
+      settingsHeading: "Settings",
       settingsDescription:
-        "Replies are muted when the comment, display name, or username contains any keyword.",
+        "Configure filtering, Home timeline shortcuts, and moderation data.",
+      generalSettingsLabel: "General",
+      generalSettingsHint:
+        "Choose how XCat appears and which controls are visible.",
       displayLanguageLabel: "Display language",
       displayLanguageHint:
         "Auto follows Chrome's display language and falls back to English.",
       languageAuto: "Auto",
       languageEnglish: "English",
       languageChinese: "Chinese",
-      commentPanelLabel: "Show right-side comments panel",
+      commentPanelLabel: "Show right-side comments debug panel",
       commentPanelHint: "Filtering still runs when the panel is hidden.",
+      homeQuickActionsLabel: "Home timeline shortcuts",
+      homeQuickActionsHint:
+        "Show X-native shortcuts in the upper-right corner of posts on the Home timeline.",
+      homeQuickMuteLabel: "Show quick Mute",
+      homeQuickMuteHint: "Mute an account through X's native post menu.",
+      homeQuickBlockLabel: "Show quick Block",
+      homeQuickBlockHint: "Block an account through X's native post menu.",
       customKeywordsLabel: "Custom keywords",
       customKeywordsPlaceholder: "Enter one keyword per line",
       customKeywordsHint:
@@ -31,6 +41,7 @@
         "Synced subscription keywords appear here",
       subscriptionPreviewHint:
         "Preview content comes from the latest sync and is used together with custom keywords.",
+      readOnlyLabel: "Read only",
       blockHistoryLabel: "Block history",
       blockHistoryHint:
         "Successful blocks are saved with the reply, display name, username, time, and keyword-match status.",
@@ -39,16 +50,15 @@
       statusExportedBlocks: "Exported {count} block records.",
       statusNoBlockHistory: "There are no block records to export.",
       statusExportFailed: "Could not export block history.",
-      saveSettings: "Save settings",
-      clearKeywords: "Clear custom keywords",
+      saveKeywords: "Save",
       statusSaving: "Saving...",
       statusSaveFailed: "Save failed. Please try again.",
+      statusGeneralSaved: "Setting updated.",
+      statusKeywordsSaved: "Saved {keywordCount} custom keywords.",
       statusLoadingFailed: "Could not load settings. Please reopen this page.",
       statusSyncing: "Syncing subscriptions...",
       statusSyncFailed: "Sync failed. Please try again.",
       statusSyncFailedWithError: "Sync failed: {message}",
-      statusSaved:
-        "Saved {keywordCount} custom keywords and {subscriptionCount} subscription URLs.",
       statusSynced: "Synced {keywordCount} subscription keywords.",
       statusSyncedWithFailures:
         "Synced {keywordCount} subscription keywords; {failureCount} URLs failed: {failures}",
@@ -57,9 +67,10 @@
       unsupportedProtocol: "Only http/https is supported: {url}",
       responseStatus: "{origin} returned {status}",
       popupDescription: "Open X and filter unwanted replies on post pages.",
-      visitX: "Visit x.com",
-      openSettings: "Keyword settings",
+      openSettings: "Settings",
       quickKeywordLabel: "Keyword",
+      quickKeywordSectionLabel: "Quick add",
+      quickKeywordSectionHint: "Add a keyword to your custom filter list.",
       quickKeywordPlaceholder: "Add a keyword",
       quickAddKeyword: "Add",
       quickKeywordAdding: "Adding keyword...",
@@ -67,22 +78,28 @@
       quickKeywordExists: '"{keyword}" is already in your keywords.',
       quickKeywordEmpty: "Enter a keyword first.",
       quickKeywordAddFailed: "Could not add the keyword.",
-      openingX: "Opening x.com...",
-      openedX: "Cat is visiting X.",
-      openXFailed: "Could not open x.com.",
     },
     zh: {
       optionsTitle: "XCat 设置",
-      settingsHeading: "屏蔽关键词设置",
+      settingsHeading: "设置",
       settingsDescription:
-        "评论、昵称或用户名中包含任一关键词时，该评论会被置灰标记。",
+        "管理过滤规则、Home 时间线快捷操作和本地管理数据。",
+      generalSettingsLabel: "通用",
+      generalSettingsHint: "设置 XCat 的显示方式和页面中可见的功能。",
       displayLanguageLabel: "显示语言",
       displayLanguageHint: "自动模式跟随 Chrome 显示语言，不支持时默认英文。",
       languageAuto: "自动",
       languageEnglish: "英文",
       languageChinese: "中文",
-      commentPanelLabel: "显示右侧评论浮窗",
+      commentPanelLabel: "显示右侧评论调试面板",
       commentPanelHint: "关闭后仍会继续过滤垃圾评论。",
+      homeQuickActionsLabel: "Home 时间线快捷按钮",
+      homeQuickActionsHint:
+        "在 Home 时间线帖子的右上角显示使用 X 原生图标的快捷操作。",
+      homeQuickMuteLabel: "显示快捷 Mute",
+      homeQuickMuteHint: "通过 X 的帖子菜单将账号静音。",
+      homeQuickBlockLabel: "显示快捷 Block",
+      homeQuickBlockHint: "通过 X 的帖子菜单拉黑账号。",
       customKeywordsLabel: "自定义关键词",
       customKeywordsPlaceholder: "每行输入一个关键词",
       customKeywordsHint:
@@ -96,6 +113,7 @@
       subscriptionPreviewPlaceholder: "同步后在这里预览订阅关键词",
       subscriptionPreviewHint:
         "预览内容来自最近一次同步，会和自定义关键词一起用于标记垃圾回复。",
+      readOnlyLabel: "只读",
       blockHistoryLabel: "Block 记录",
       blockHistoryHint:
         "成功拉黑后记录正文、昵称、用户名、时间和关键词命中状态，无法获取的字段留空。",
@@ -104,16 +122,15 @@
       statusExportedBlocks: "已导出 {count} 条 Block 记录。",
       statusNoBlockHistory: "暂无可导出的 Block 记录。",
       statusExportFailed: "导出 Block 记录失败。",
-      saveSettings: "保存设置",
-      clearKeywords: "清空自定义关键词",
+      saveKeywords: "保存",
       statusSaving: "正在保存...",
       statusSaveFailed: "保存失败，请重试。",
+      statusGeneralSaved: "设置已更新。",
+      statusKeywordsSaved: "已保存 {keywordCount} 个自定义关键词。",
       statusLoadingFailed: "读取设置失败，请重新打开此页面。",
       statusSyncing: "正在同步订阅...",
       statusSyncFailed: "同步失败，请重试。",
       statusSyncFailedWithError: "同步失败：{message}",
-      statusSaved:
-        "已保存 {keywordCount} 个自定义关键词和 {subscriptionCount} 个订阅链接。",
       statusSynced: "已同步 {keywordCount} 个订阅关键词。",
       statusSyncedWithFailures:
         "已同步 {keywordCount} 个订阅关键词，{failureCount} 个链接失败：{failures}",
@@ -122,9 +139,10 @@
       unsupportedProtocol: "仅支持 http/https：{url}",
       responseStatus: "{origin} 返回 {status}",
       popupDescription: "打开 X，并在帖子页面过滤垃圾回复。",
-      visitX: "访问 x.com",
-      openSettings: "屏蔽关键词设置",
+      openSettings: "设置",
       quickKeywordLabel: "关键词",
+      quickKeywordSectionLabel: "快捷添加",
+      quickKeywordSectionHint: "将关键词添加到你的自定义过滤列表。",
       quickKeywordPlaceholder: "输入关键词",
       quickAddKeyword: "添加",
       quickKeywordAdding: "正在添加关键词...",
@@ -132,9 +150,6 @@
       quickKeywordExists: "关键词“{keyword}”已存在。",
       quickKeywordEmpty: "请先输入关键词。",
       quickKeywordAddFailed: "添加关键词失败，请重试。",
-      openingX: "正在打开 x.com...",
-      openedX: "猫猫正在访问 X。",
-      openXFailed: "无法打开 x.com。",
     },
   };
 
@@ -193,6 +208,13 @@
 
     for (const element of root.querySelectorAll("[data-i18n-title]")) {
       element.title = translate(element.dataset.i18nTitle);
+    }
+
+    for (const element of root.querySelectorAll("[data-i18n-aria-label]")) {
+      element.setAttribute(
+        "aria-label",
+        translate(element.dataset.i18nAriaLabel),
+      );
     }
   }
 

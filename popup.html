@@ -8,24 +8,59 @@
   </head>
   <body>
     <main class="panel">
-      <div class="cat" aria-hidden="true">
-        <span class="ear ear-left"></span>
-        <span class="ear ear-right"></span>
-        <span class="face">
-          <span class="eye eye-left"></span>
-          <span class="eye eye-right"></span>
-          <span class="nose"></span>
+      <header class="brand-card">
+        <button
+          id="open-settings"
+          class="settings-button"
+          type="button"
+          data-i18n-title="openSettings"
+          data-i18n-aria-label="openSettings"
+          title="Settings"
+          aria-label="Settings"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.07-.94l2.03-1.58-1.92-3.32-2.39.96a7.2 7.2 0 00-1.63-.95L14.86 3h-3.72l-.36 3.17c-.59.24-1.13.56-1.63.95l-2.39-.96-1.92 3.32 2.03 1.58c-.05.31-.07.63-.07.94s.02.63.07.94l-2.03 1.58 1.92 3.32 2.39-.96c.5.39 1.04.71 1.63.95l.36 3.17h3.72l.36-3.17c.59-.24 1.13-.56 1.63-.95l2.39.96 1.92-3.32-2.02-1.58zM13 15.5A3.5 3.5 0 1113 8a3.5 3.5 0 010 7.5z"></path>
+          </svg>
+        </button>
+        <span class="logo">
+          <img src="icons/xcat.svg" alt="">
         </span>
-      </div>
-      <h1>XCat</h1>
-      <p data-i18n="popupDescription">Open X and filter unwanted replies on post pages.</p>
-      <button id="visit-x" type="button" data-i18n="visitX">Visit x.com</button>
-      <button id="open-settings" class="secondary" type="button" data-i18n="openSettings">Keyword settings</button>
-      <form id="quick-add-form" class="quick-add">
-        <label class="sr-only" for="quick-keyword" data-i18n="quickKeywordLabel">Keyword</label>
-        <input id="quick-keyword" type="text" autocomplete="off" spellcheck="false" placeholder="Add a keyword" data-i18n-placeholder="quickKeywordPlaceholder">
-        <button id="quick-add-keyword" type="submit" data-i18n="quickAddKeyword">Add</button>
-      </form>
+        <div class="brand-copy">
+          <span class="eyebrow">XCAT</span>
+          <h1>XCat</h1>
+          <p data-i18n="popupDescription">Open X and filter unwanted replies on post pages.</p>
+        </div>
+      </header>
+
+      <section class="quick-card">
+        <div class="quick-heading">
+          <div>
+            <strong data-i18n="quickKeywordSectionLabel">Quick add</strong>
+            <small data-i18n="quickKeywordSectionHint">Add a keyword to your custom filter list.</small>
+          </div>
+          <span class="enter-hint" aria-hidden="true">↵</span>
+        </div>
+
+        <form id="quick-add-form" class="quick-add">
+          <label class="sr-only" for="quick-keyword" data-i18n="quickKeywordLabel">Keyword</label>
+          <div class="quick-add-control">
+            <input id="quick-keyword" type="text" autocomplete="off" spellcheck="false" placeholder="Add a keyword" data-i18n-placeholder="quickKeywordPlaceholder">
+            <button
+              id="quick-add-keyword"
+              type="submit"
+              data-i18n-title="quickAddKeyword"
+              data-i18n-aria-label="quickAddKeyword"
+              title="Add"
+              aria-label="Add"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5z"></path>
+              </svg>
+            </button>
+          </div>
+        </form>
+      </section>
+
       <p id="status" class="status" role="status"></p>
     </main>
     <script src="i18n.js"></script>

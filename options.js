@@ -2,6 +2,8 @@ const CUSTOM_KEYWORDS_STORAGE_KEY = "customSpamKeywords";
 const KEYWORD_SUBSCRIPTION_URLS_STORAGE_KEY = "keywordSubscriptionUrls";
 const SUBSCRIBED_KEYWORDS_STORAGE_KEY = "subscribedSpamKeywords";
 const SHOW_COMMENT_PANEL_STORAGE_KEY = "showCommentPanel";
+const SHOW_HOME_QUICK_MUTE_STORAGE_KEY = "showHomeQuickMute";
+const SHOW_HOME_QUICK_BLOCK_STORAGE_KEY = "showHomeQuickBlock";
 const BLOCK_HISTORY_STORAGE_KEY = "blockHistory";
 const form = document.getElementById("settings-form");
 const keywordsInput = document.getElementById("keywords");
@@ -9,8 +11,12 @@ const subscriptionUrlsInput = document.getElementById("subscription-urls");
 const subscriptionPreviewInput = document.getElementById("subscription-preview");
 const syncSubscriptionsButton = document.getElementById("sync-subscriptions");
 const showCommentPanelInput = document.getElementById("show-comment-panel");
+const showHomeQuickMuteInput = document.getElementById("show-home-quick-mute");
+const showHomeQuickBlockInput = document.getElementById(
+  "show-home-quick-block",
+);
 const displayLanguageInput = document.getElementById("display-language");
-const clearButton = document.getElementById("clear-keywords");
+const saveKeywordsButton = document.getElementById("save-keywords");
 const exportBlockHistoryButton = document.getElementById(
   "export-block-history",
 );
@@ -77,6 +83,8 @@ async function loadSettings() {
       CUSTOM_KEYWORDS_STORAGE_KEY,
       KEYWORD_SUBSCRIPTION_URLS_STORAGE_KEY,
       SHOW_COMMENT_PANEL_STORAGE_KEY,
+      SHOW_HOME_QUICK_MUTE_STORAGE_KEY,
+      SHOW_HOME_QUICK_BLOCK_STORAGE_KEY,
     ]),
     chrome.storage.local.get([SUBSCRIBED_KEYWORDS_STORAGE_KEY]),
   ]);
@@ -93,6 +101,10 @@ async function loadSettings() {
     : "";
   showCommentPanelInput.checked =
     syncStored[SHOW_COMMENT_PANEL_STORAGE_KEY] !== false;
+  showHomeQuickMuteInput.checked =
+    syncStored[SHOW_HOME_QUICK_MUTE_STORAGE_KEY] !== false;
+  showHomeQuickBlockInput.checked =
+    syncStored[SHOW_HOME_QUICK_BLOCK_STORAGE_KEY] !== false;
 }
 
 function getBlockHistory(value) {
@@ -135,20 +147,31 @@ async function exportBlockHistory() {
   });
 }
 
-async function saveSettings() {
+async function saveKeywords() {
   const keywords = parseKeywords(keywordsInput.value);
-  const subscriptionUrls = parseSubscriptionUrls(subscriptionUrlsInput.value);
   await chrome.storage.sync.set({
     [CUSTOM_KEYWORDS_STORAGE_KEY]: keywords,
-    [KEYWORD_SUBSCRIPTION_URLS_STORAGE_KEY]: subscriptionUrls,
-    [SHOW_COMMENT_PANEL_STORAGE_KEY]: showCommentPanelInput.checked,
   });
   keywordsInput.value = keywords.join("\n");
-  subscriptionUrlsInput.value = subscriptionUrls.join("\n");
-  statusText.textContent = XCatI18n.t("statusSaved", {
+  statusText.textContent = XCatI18n.t("statusKeywordsSaved", {
     keywordCount: keywords.length,
-    subscriptionCount: subscriptionUrls.length,
   });
+}
+
+async function saveToggleSetting(input, storageKey) {
+  const nextValue = input.checked;
+  input.disabled = true;
+  statusText.textContent = XCatI18n.t("statusSaving");
+
+  try {
+    await chrome.storage.sync.set({ [storageKey]: nextValue });
+    statusText.textContent = XCatI18n.t("statusGeneralSaved");
+  } catch {
+    input.checked = !nextValue;
+    statusText.textContent = XCatI18n.t("statusSaveFailed");
+  } finally {
+    input.disabled = false;
+  }
 }
 
 async function syncSubscriptions() {
@@ -194,26 +217,42 @@ async function syncSubscriptions() {
   });
 }
 
-form.addEventListener("submit", async (event) => {
+form.addEventListener("submit", (event) => {
   event.preventDefault();
+});
+
+saveKeywordsButton.addEventListener("click", async () => {
+  saveKeywordsButton.disabled = true;
   statusText.textContent = XCatI18n.t("statusSaving");
 
   try {
-    await saveSettings();
-  } catch (error) {
+    await saveKeywords();
+  } catch {
     statusText.textContent = XCatI18n.t("statusSaveFailed");
+  } finally {
+    saveKeywordsButton.disabled = false;
   }
 });
 
-clearButton.addEventListener("click", async () => {
-  keywordsInput.value = "";
-  statusText.textContent = XCatI18n.t("statusSaving");
+showCommentPanelInput.addEventListener("change", () => {
+  void saveToggleSetting(
+    showCommentPanelInput,
+    SHOW_COMMENT_PANEL_STORAGE_KEY,
+  );
+});
 
-  try {
-    await saveSettings();
-  } catch (error) {
-    statusText.textContent = XCatI18n.t("statusSaveFailed");
-  }
+showHomeQuickMuteInput.addEventListener("change", () => {
+  void saveToggleSetting(
+    showHomeQuickMuteInput,
+    SHOW_HOME_QUICK_MUTE_STORAGE_KEY,
+  );
+});
+
+showHomeQuickBlockInput.addEventListener("change", () => {
+  void saveToggleSetting(
+    showHomeQuickBlockInput,
+    SHOW_HOME_QUICK_BLOCK_STORAGE_KEY,
+  );
 });
 
 syncSubscriptionsButton.addEventListener("click", async () => {
