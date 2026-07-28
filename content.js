@@ -1258,7 +1258,7 @@ async function muteUserThroughX(comment) {
     activateElement(menuButton);
     const escapedUsername = escapeRegExp(username);
     const mutePattern = new RegExp(
-      `^(mute|静音|ミュート)\\s+${escapedUsername}(\\b|$)`,
+      `^(mute|静音|ミュート)(?:\\s+${escapedUsername}(\\b|$))?$`,
       "i",
     );
     const muteItem = await waitForElement(() =>
